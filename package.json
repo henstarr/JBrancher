@@ -17,7 +17,8 @@
     "test": "node --test",
     "demo": "node bin/jbrancher.js demo",
     "doctor": "node bin/jbrancher.js doctor",
-    "live:smoke": "node bin/jbrancher.js live-check"
+    "live:smoke": "node bin/jbrancher.js live-check",
+    "bench:offline": "node benchmarks/run-routing.js"
   },
   "exports": {
     ".": "./src/index.js",

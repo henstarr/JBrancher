@@ -79,6 +79,8 @@ const event = await brancher.step({
 });
 ```
 
+That is the drop-in boundary: your harness provides candidates and execution; JBrancher decides whether a bounded candidate is safe to try, and your existing actor remains the fallback. In an existing loop, wrap the call that currently chooses the next tool. Keep the harness's authorization, sandbox, observation, retry, and completion checks unchanged.
+
 Rules are evaluated first. Jev can select only among candidates supplied by the harness. If the evaluator is uncertain or unavailable, the actor receives the step. Deterministic execution permissions remain in the harness.
 
 ## Jev connection
@@ -114,6 +116,24 @@ Measure successful tasks, clean termination, actor calls actually avoided, evalu
 - A semantic completion score is not proof that a task is complete. Use executable checks and state revisions.
 - Jev scores require validation in the target domain; the default thresholds are routing placeholders.
 - The current release has a generic JavaScript runtime and an HTTP Jev adapter. Framework integrations and a hosted dashboard are planned.
+
+## Benchmarking
+
+Start with the reproducible offline routing benchmark:
+
+```sh
+npm run bench:offline
+```
+
+It compares actor-only, rules-plus-actor, and rules-plus-Jev-plus-actor on a fixed fixture. This measures decision accuracy, actor calls avoided, fallback coverage, and evaluator calls without making paid requests. It is a wiring and regression benchmark, not evidence that Jev improves every task.
+
+For end-to-end evidence, use the same agent, model, task set, Docker image, timeout, and retry budget in paired runs. The recommended progression is:
+
+1. A 10–25 task harness-native smoke set.
+2. A larger Terminal-Bench/Harbor run with a custom Harbor agent adapter.
+3. SWE-bench Lite or Verified after the agent can emit valid prediction patches.
+
+See [docs/benchmarking.md](docs/benchmarking.md) for the controls, metrics, and commands.
 
 ## Project plan
 
