@@ -1,0 +1,25 @@
+{
+  "name": "jevbrancher",
+  "version": "0.1.0",
+  "description": "Rules-first decision routing for AI agent harnesses, with optional Jev evaluation and actor fallback.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node examples/demo.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./jev": "./src/jev.js"
+  },
+  "files": [
+    "src",
+    "examples",
+    "README.md",
+    "PRODUCTIZATION_PLAN.md",
+    "LICENSE"
+  ]
+}
