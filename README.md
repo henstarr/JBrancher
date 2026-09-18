@@ -4,6 +4,15 @@
 
 ![JBrancher banner](assets/jbrancher-banner.png)
 
+<p align="center">
+  <a href="https://github.com/henstarr/JBrancher"><img src="https://img.shields.io/badge/View%20on-GitHub-111827?style=for-the-badge&logo=github&logoColor=white" alt="View JBrancher on GitHub"></a>
+  <a href="https://github.com/henstarr/JBrancher/stargazers"><img src="https://img.shields.io/github/stars/henstarr/JBrancher?style=for-the-badge&logo=github&label=Star" alt="Star JBrancher"></a>
+  <a href="https://github.com/henstarr/JBrancher/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/henstarr/JBrancher/ci.yml?style=for-the-badge&label=CI" alt="JBrancher CI status"></a>
+  <a href="https://github.com/henstarr/JBrancher/issues"><img src="https://img.shields.io/badge/Issues-Open-2563eb?style=for-the-badge&logo=github" alt="JBrancher issues"></a>
+</p>
+
+<p align="center"><a href="PRODUCTIZATION_PLAN.md">Product plan</a> · <a href="CONTRIBUTING.md">Contribute</a> · <a href="LICENSE">MIT license</a></p>
+
 JBrancher lets an existing agent loop choose the next action through a small decision boundary:
 
 ```text
@@ -27,7 +36,22 @@ npm test
 npm run demo
 ```
 
-Node.js 22 or newer is required. The demo makes no network requests and needs no API key.
+Node.js 20 or newer is required. The demo makes no network requests and needs no API key.
+
+### CLI
+
+```sh
+npm run doctor
+npm run demo
+```
+
+For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
+
+```sh
+npm run live:smoke
+```
+
+The command makes three synthetic requests and prints only decisions, scores, and usage metadata. It never prints the key.
 
 ## Use in a harness
 

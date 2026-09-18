@@ -7,12 +7,17 @@
   "repository": "github:henstarr/JBrancher",
   "bugs": "https://github.com/henstarr/JBrancher/issues",
   "homepage": "https://github.com/henstarr/JBrancher#readme",
+  "bin": {
+    "jbrancher": "./bin/jbrancher.js"
+  },
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
     "test": "node --test",
-    "demo": "node examples/demo.js"
+    "demo": "node bin/jbrancher.js demo",
+    "doctor": "node bin/jbrancher.js doctor",
+    "live:smoke": "node bin/jbrancher.js live-check"
   },
   "exports": {
     ".": "./src/index.js",
@@ -20,9 +25,11 @@
   },
   "files": [
     "src",
+    "bin",
     "examples",
     "README.md",
     "PRODUCTIZATION_PLAN.md",
+    ".env.example",
     "LICENSE"
   ]
 }

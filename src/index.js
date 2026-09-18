@@ -77,25 +77,26 @@ export function createJBrancher({
       });
     }
 
+    let evaluation = null;
     if (evaluate && candidates.length > 0) {
       try {
         const verdict = await evaluate({ state: clone(state), task, history: clone(history), candidates: clone(candidates), signal });
+        evaluation = { scores: clone(verdict?.scores ?? []), usage: clone(verdict?.usage ?? []) };
         const selected = choose(verdict?.scores, candidates, minimumProbability, minimumMargin);
         if (selected) {
           return { source: 'jev', action: selected.action, score: selected.score,
-            scores: selected.scores, selected: selected.index, candidates, usage: clone(verdict?.usage ?? []) };
+            scores: selected.scores, selected: selected.index, candidates, evaluation, usage: clone(verdict?.usage ?? []) };
         }
       } catch (error) {
-        const fallback = new Error('Evaluator unavailable');
-        fallback.cause = error;
+        evaluation = { status: 'unavailable', usage: clone(error?.usage ?? []) };
         // Evaluation failure is advisory; the actor remains available.
       }
     }
 
-    if (!actor) return { source: 'abstain', action: null, reason: 'No rule, confident evaluator, or actor was available', usage: [] };
+    if (!actor) return { source: 'abstain', action: null, reason: 'No rule, confident evaluator, or actor was available', evaluation, usage: [] };
     const result = await actor({ state: clone(state), task, history: clone(history), candidates: clone(candidates), signal });
     assertPlainAction(result?.action ?? null);
-    return { source: 'actor', action: clone(result?.action ?? null), usage: clone(result?.usage ?? []) };
+    return { source: 'actor', action: clone(result?.action ?? null), evaluation, usage: clone(result?.usage ?? []) };
   }
 
   async function step(input = {}) {

@@ -34,6 +34,19 @@ test('uncertain evaluation falls back to the actor', async () => {
   const result = await brancher.decide({ state: {} });
   assert.equal(result.source, 'actor');
   assert.deepEqual(result.action, { tool: 'verify', args: {} });
+  assert.deepEqual(result.evaluation.scores, [0.69, 0.68]);
+});
+
+test('evaluator errors remain advisory and preserve actor fallback', async () => {
+  const brancher = createJBrancher({
+    getCandidates: async () => [{ tool: 'verify', args: {} }],
+    evaluate: async () => { throw Object.assign(new Error('hidden provider detail'), { usage: [{ status: 'unknown' }] }); },
+    actor: async () => ({ action: null })
+  });
+  const result = await brancher.decide({ state: {} });
+  assert.equal(result.source, 'actor');
+  assert.equal(result.evaluation.status, 'unavailable');
+  assert.deepEqual(result.evaluation.usage, [{ status: 'unknown' }]);
 });
 
 test('run records transitions and observes updated state', async () => {
