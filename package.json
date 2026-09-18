@@ -22,14 +22,14 @@
   },
   "exports": {
     ".": "./src/index.js",
-    "./jev": "./src/jev.js"
+    "./jev": "./src/jev.js",
+    "./server": "./src/server.js"
   },
   "files": [
     "src",
     "bin",
     "examples",
     "README.md",
-    "PRODUCTIZATION_PLAN.md",
     ".env.example",
     "LICENSE"
   ]

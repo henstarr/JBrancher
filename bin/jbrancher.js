@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
+import { createJBrancherServer } from '../src/server.js';
 
 function loadDotEnv(file = resolve(process.cwd(), '.env')) {
   if (!existsSync(file)) return false;
@@ -20,7 +21,35 @@ function loadDotEnv(file = resolve(process.cwd(), '.env')) {
 }
 
 function printHelp() {
-  console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  live-check  Run three bounded synthetic Jev decisions\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
+}
+
+function flag(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? fallback : process.argv[index + 1] ?? fallback;
+}
+
+async function proxy() {
+  loadDotEnv();
+  if (!process.env.TYPESAFE_API_KEY) {
+    throw new Error('TYPESAFE_API_KEY is not configured. Put it in .env or the process environment.');
+  }
+  const port = Number(flag('--port', '8787'));
+  const host = flag('--host', '127.0.0.1');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid --port');
+  const service = createJBrancherServer({
+    apiKey: process.env.TYPESAFE_API_KEY,
+    model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
+    timeoutMs: Number(process.env.JBRANCHER_TIMEOUT_MS ?? 5000)
+  });
+  const address = await service.listen({ host, port });
+  console.log(JSON.stringify({ status: 'listening', ...address, endpoints: ['/health', '/stats', '/v1/decide'] }));
+  const shutdown = async () => {
+    await service.close();
+    process.exit(0);
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
 }
 
 async function liveCheck() {
@@ -65,6 +94,7 @@ async function main() {
     if (!report.nodeSupported || !report.typesafeKeyConfigured) process.exitCode = 1;
     return;
   }
+  if (command === 'proxy') return proxy();
   if (command === 'live-check') return liveCheck();
   throw new Error(`Unknown command: ${command}`);
 }

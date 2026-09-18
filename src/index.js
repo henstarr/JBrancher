@@ -130,3 +130,27 @@ export function createJBrancher({
 }
 
 export { sameAction };
+
+/**
+ * Wrap an existing actor without changing the surrounding harness loop.
+ * The actor's nextAction method becomes the fallback path.
+ */
+export function withJBrancher(actor, options = {}) {
+  if (!actor || typeof actor.nextAction !== 'function') {
+    throw new TypeError('withJBrancher requires an actor with nextAction(input)');
+  }
+  const originalNextAction = actor.nextAction.bind(actor);
+  const brancher = createJBrancher({
+    ...options,
+    actor: input => originalNextAction(input)
+  });
+  const brancherMethods = new Set(['decide', 'step', 'run']);
+  return new Proxy(actor, {
+    get(target, property, receiver) {
+      if (property === 'nextAction') return input => brancher.decide(input);
+      if (property === 'jbrancher') return brancher;
+      if (brancherMethods.has(property)) return brancher[property].bind(brancher);
+      return Reflect.get(target, property, receiver);
+    }
+  });
+}

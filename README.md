@@ -25,24 +25,42 @@ JBrancher is for teams that want to keep their existing agent loop while making 
 
 This project is an early developer release. It is designed to measure whether a decision layer actually reduces cost or latency in a particular harness. It does not claim universal savings or act as a sandbox.
 
-## Install
+## Get started in 60 seconds
 
-The package is currently used directly from source:
+Install JBrancher directly from GitHub:
 
 ```sh
-git clone https://github.com/henstarr/JBrancher.git
-cd JBrancher
-npm test
-npm run demo
+npm install github:henstarr/JBrancher
 ```
 
-Node.js 20 or newer is required. The demo makes no network requests and needs no API key.
+Node.js 20 or newer is required. Then wrap the actor your harness already uses:
+
+```js
+import { withJBrancher } from 'jbrancher';
+import { createJevEvaluator } from 'jbrancher/jev';
+
+const agent = withJBrancher(existingActor, {
+  getCandidates: context => harness.allowedNextActions(context),
+  evaluate: createJevEvaluator({ apiKey: process.env.TYPESAFE_API_KEY })
+});
+
+const decision = await agent.nextAction({ task, state, history });
+await harness.execute(decision.action, { task, state, history });
+```
+
+Your actor remains the fallback. JBrancher only selects from the candidates returned by your harness.
+
+The offline demo makes no network requests and needs no API key:
+
+```sh
+npx jbrancher demo
+```
 
 ### CLI
 
 ```sh
-npm run doctor
-npm run demo
+npx jbrancher doctor
+npx jbrancher demo
 ```
 
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
@@ -52,6 +70,33 @@ npm run live:smoke
 ```
 
 The command makes three synthetic requests and prints only decisions, scores, and usage metadata. It never prints the key.
+
+### Language-agnostic decision proxy
+
+For Python, Go, Rust, or another harness, run the local decision service:
+
+```sh
+TYPESAFE_API_KEY=your-key npx jbrancher proxy --port 8787
+```
+
+Submit a bounded candidate set:
+
+```sh
+curl http://127.0.0.1:8787/v1/decide \
+  -H 'content-type: application/json' \
+  -d '{
+    "task": "Repair and verify the artifact",
+    "state": {"path": "output.json", "verified": false},
+    "history": [],
+    "candidates": [
+      {"tool": "verify", "args": {}},
+      {"tool": "repair", "args": {}},
+      null
+    ]
+  }'
+```
+
+The proxy exposes `GET /health` and `GET /stats`. It is a decision proxy, not a transparent OpenAI/Anthropic replacement: the caller must supply the actions that are legal in the current harness state. This is what keeps JBrancher bounded and prevents it from inventing executable work.
 
 ## Use in a harness
 
@@ -137,7 +182,7 @@ See [docs/benchmarking.md](docs/benchmarking.md) for the controls, metrics, and 
 
 ## Project plan
 
-See [PRODUCTIZATION_PLAN.md](PRODUCTIZATION_PLAN.md) for the product, evaluation, documentation, release, and launch plan.
+See [docs/benchmarking.md](docs/benchmarking.md) for the evaluation and integration guide.
 
 ## Attribution
 
