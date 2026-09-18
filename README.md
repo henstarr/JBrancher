@@ -1,14 +1,18 @@
-# JevBrancher
+# JBrancher
 
 **Fast branch decisions for AI agent harnesses.**
 
-JevBrancher lets an existing agent loop choose the next action through a small decision boundary:
+![JBrancher banner](assets/jbrancher-banner.png)
+
+JBrancher lets an existing agent loop choose the next action through a small decision boundary:
 
 ```text
 deterministic rule → Jev chooses from known candidates → existing actor fallback
 ```
 
-The harness owns tools, permissions, execution, and completion checks. JevBrancher supplies a typed routing point for decisions that are semantic but bounded. The runtime never invents an action outside the candidate set.
+The harness owns tools, permissions, execution, and completion checks. JBrancher supplies a typed routing point for decisions that are semantic but bounded. The runtime never invents an action outside the candidate set.
+
+JBrancher is for teams that want to keep their existing agent loop while making bounded next-step decisions faster and easier to measure.
 
 This project is an early developer release. It is designed to measure whether a decision layer actually reduces cost or latency in a particular harness. It does not claim universal savings or act as a sandbox.
 
@@ -17,8 +21,8 @@ This project is an early developer release. It is designed to measure whether a 
 The package is currently used directly from source:
 
 ```sh
-git clone https://github.com/henstarr/JevBrancher.git
-cd JevBrancher
+git clone https://github.com/henstarr/JBrancher.git
+cd JBrancher
 npm test
 npm run demo
 ```
@@ -28,16 +32,16 @@ Node.js 22 or newer is required. The demo makes no network requests and needs no
 ## Use in a harness
 
 ```js
-import { createJevBrancher } from 'jevbrancher';
+import { createJBrancher } from 'jbrancher';
 
-const brancher = createJevBrancher({
+const brancher = createJBrancher({
   getCandidates: ({ state }) => [
     { tool: 'run_check', args: { path: state.path } },
     { tool: 'repair', args: { path: state.path } },
     null
   ],
   evaluate: async ({ state, task, history, candidates, signal }) => {
-    // Connect createJevEvaluator from `jevbrancher/jev` here.
+    // Connect createJevEvaluator from `jbrancher/jev` here.
     return { scores: [0.88, 0.61, 0.12], usage: [] };
   },
   actor: ({ state, task, history }) => existingActor.nextAction({ state, task, history }),
@@ -56,7 +60,7 @@ Rules are evaluated first. Jev can select only among candidates supplied by the 
 ## Jev connection
 
 ```js
-import { createJevEvaluator } from 'jevbrancher/jev';
+import { createJevEvaluator } from 'jbrancher/jev';
 
 const evaluate = createJevEvaluator({
   apiKey: process.env.TYPESAFE_API_KEY,
@@ -68,7 +72,7 @@ The adapter uses TypeSafe’s System One HTTP endpoint and a pinned model identi
 
 ## Why this placement matters
 
-Calling Jev after an expensive actor turn can reduce the actor’s next action but still increase total cost. JevBrancher is built around the earlier decision point: derive a bounded candidate set from current harness state, ask Jev to rank it, and call the actor only when rules or the evaluator cannot settle the step.
+Calling Jev after an expensive actor turn can reduce the actor’s next action but still increase total cost. JBrancher is built around the earlier decision point: derive a bounded candidate set from current harness state, ask Jev to rank it, and call the actor only when rules or the evaluator cannot settle the step.
 
 That placement is an optimization hypothesis, not a guarantee. Compare at least these controls in your own task set:
 
@@ -93,7 +97,7 @@ See [PRODUCTIZATION_PLAN.md](PRODUCTIZATION_PLAN.md) for the product, evaluation
 
 ## Attribution
 
-JevBrancher was developed as an independent implementation informed by experiments in the AI agent decision-routing space, including the public `MNWinn/agent-switchboard` project. The runtime, package identity, repository history, and product plan here are maintained independently.
+JBrancher was developed as an independent implementation informed by experiments in the AI agent decision-routing space, including the public `MNWinn/agent-switchboard` project. The runtime, package identity, repository history, and product plan here are maintained independently.
 
 ## License
 

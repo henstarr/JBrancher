@@ -32,7 +32,7 @@ function choose(scores, candidates, minimumProbability, minimumMargin) {
  * step, the existing actor remains the fallback. The runtime never executes
  * an action unless the caller supplies an executor.
  */
-export function createJevBrancher({
+export function createJBrancher({
   rules = [],
   getCandidates,
   evaluate,

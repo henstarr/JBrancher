@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createJevBrancher } from '../src/index.js';
+import { createJBrancher } from '../src/index.js';
 
 test('rules run before evaluation and actor fallback', async () => {
   const calls = [];
-  const brancher = createJevBrancher({
+  const brancher = createJBrancher({
     rules: [() => ({ action: { tool: 'check', args: {} }, reason: 'known check' })],
     evaluate: async () => { calls.push('evaluate'); return { scores: [1] }; },
     actor: async () => { calls.push('actor'); return { action: null }; }
@@ -15,7 +15,7 @@ test('rules run before evaluation and actor fallback', async () => {
 });
 
 test('Jev selects only a supplied candidate when probability and margin pass', async () => {
-  const brancher = createJevBrancher({
+  const brancher = createJBrancher({
     getCandidates: async () => [{ tool: 'write', args: { value: 8 } }, { tool: 'verify', args: {} }],
     evaluate: async () => ({ scores: [0.91, 0.52] }),
     actor: async () => ({ action: null })
@@ -26,7 +26,7 @@ test('Jev selects only a supplied candidate when probability and margin pass', a
 });
 
 test('uncertain evaluation falls back to the actor', async () => {
-  const brancher = createJevBrancher({
+  const brancher = createJBrancher({
     getCandidates: async () => [{ tool: 'write', args: {} }, { tool: 'verify', args: {} }],
     evaluate: async () => ({ scores: [0.69, 0.68] }),
     actor: async () => ({ action: { tool: 'verify', args: {} } })
@@ -37,7 +37,7 @@ test('uncertain evaluation falls back to the actor', async () => {
 });
 
 test('run records transitions and observes updated state', async () => {
-  const brancher = createJevBrancher({
+  const brancher = createJBrancher({
     getCandidates: async ({ state }) => state.done ? [null] : [{ tool: 'finish', args: {} }],
     evaluate: async ({ candidates }) => ({ scores: candidates.map(() => 0.95) }),
     execute: async () => ({ done: true }),

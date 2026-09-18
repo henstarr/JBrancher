@@ -1,4 +1,4 @@
-# JevBrancher: product and launch plan
+# JBrancher: product and launch plan
 
 Prepared 2026-09-17. Planning deliverable; no package, remote repository, release, or paid evaluation was created by this review.
 
@@ -10,7 +10,7 @@ Suggested positioning: **“Skip unnecessary agent model calls. Keep your existi
 
 Target developers who own a JavaScript/TypeScript agent loop and pay for repeated tool-selection or recovery decisions. Start with a generic loop adapter and one complete reference application. General command generation and closed harness integrations come later.
 
-Use JevBrancher as the independent product identity. Build a clean repository informed by the reviewed experiments, with its own implementation, history, documentation, and release process.
+Use JBrancher as the independent product identity. Build a clean repository informed by the reviewed experiments, with its own implementation, history, documentation, and release process.
 
 ## 2. What the inspected repository establishes
 
@@ -125,10 +125,10 @@ Target: a developer understands the mechanism in one minute, completes an offlin
 Proposed commands, subject to package-name availability:
 
 ```sh
-npx jevbrancher demo
-npx jevbrancher doctor
-npx jevbrancher init
-npx jevbrancher compare --config jevbrancher.config.ts
+npx jbrancher demo
+npx jbrancher doctor
+npx jbrancher init
+npx jbrancher compare --config jbrancher.config.ts
 ```
 
 `demo` uses deterministic fixtures, requires no credentials, makes no inference savings claim, and prints the result location. `doctor` checks Node, environment variable presence without values, provider configuration, adapter capabilities, and writable output location. `init` creates a minimal configuration with shadow mode. `compare` defaults to offline replay; live mode requires an explicit flag and displayed bounded budget.
@@ -219,7 +219,7 @@ Create issues with these acceptance criteria, not just titles: general step API;
 
 The strongest launch story is the engineering lesson: **“We put a fast decision model inside an agent loop. Some placements made it worse. Here is the runtime and evidence for the placements that can skip expensive calls.”** This differentiates the project without overclaiming broad speedups.
 
-Suggested launch title: **“JevBrancher: rules-first routing for AI agents, with Jev fallback decisions and reproducible cost comparisons.”** If confirmation supports a stronger quantified headline, attach the task set, comparator, sample size, and date directly to it. Do not lead with “86% cheaper coding agents” from a single arithmetic microtask.
+Suggested launch title: **“JBrancher: rules-first routing for AI agents, with Jev fallback decisions and reproducible cost comparisons.”** If confirmation supports a stronger quantified headline, attach the task set, comparator, sample size, and date directly to it. Do not lead with “86% cheaper coding agents” from a single arithmetic microtask.
 
 Before launch:
 

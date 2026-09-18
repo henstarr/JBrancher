@@ -1,8 +1,8 @@
-import { createJevBrancher } from '../src/index.js';
+import { createJBrancher } from '../src/index.js';
 
 const state = { artifact: { value: 10 }, expected: 8, verified: false };
 
-const brancher = createJevBrancher({
+const brancher = createJBrancher({
   rules: [
     ({ state: current }) => current.verified ? { action: null, reason: 'Current artifact is already verified' } : null
   ],

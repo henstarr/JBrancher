@@ -1,9 +1,12 @@
 {
-  "name": "jevbrancher",
+  "name": "jbrancher",
   "version": "0.1.0",
   "description": "Rules-first decision routing for AI agent harnesses, with optional Jev evaluation and actor fallback.",
   "type": "module",
   "license": "MIT",
+  "repository": "github:henstarr/JBrancher",
+  "bugs": "https://github.com/henstarr/JBrancher/issues",
+  "homepage": "https://github.com/henstarr/JBrancher#readme",
   "engines": {
     "node": ">=22"
   },
@@ -18,6 +21,7 @@
   "files": [
     "src",
     "examples",
+    "assets",
     "README.md",
     "PRODUCTIZATION_PLAN.md",
     "LICENSE"
