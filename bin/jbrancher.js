@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createJBrancherServer } from '../src/server.js';
+import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
 
 function loadDotEnv(file = resolve(process.cwd(), '.env')) {
   if (!existsSync(file)) return false;
@@ -21,6 +22,7 @@ function loadDotEnv(file = resolve(process.cwd(), '.env')) {
 }
 
 function printHelp() {
+  console.log('Claude Code: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
   console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
 }
 
@@ -85,6 +87,12 @@ async function main() {
   const command = process.argv[2] ?? 'help';
   if (command === 'help' || command === '--help' || command === '-h') return printHelp();
   if (command === 'demo') return import('../examples/demo.js');
+  if (command === 'wrap') {
+    const options = parseClaudeArgs(process.argv.slice(3));
+    loadDotEnv();
+    process.exitCode = await wrapClaude(options);
+    return;
+  }
   if (command === 'doctor') {
     const envLoaded = loadDotEnv();
     const nodeMajor = Number(process.versions.node.split('.')[0]);

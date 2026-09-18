@@ -11,7 +11,7 @@
   <a href="https://github.com/henstarr/JBrancher/issues"><img src="https://img.shields.io/badge/Issues-Open-2563eb?style=for-the-badge&logo=github" alt="JBrancher issues"></a>
 </p>
 
-<p align="center"><a href="PRODUCTIZATION_PLAN.md">Product plan</a> · <a href="CONTRIBUTING.md">Contribute</a> · <a href="LICENSE">MIT license</a></p>
+<p align="center"><a href="docs/benchmarking.md">Benchmarks</a> · <a href="CONTRIBUTING.md">Contribute</a> · <a href="LICENSE">MIT license</a></p>
 
 JBrancher lets an existing agent loop choose the next action through a small decision boundary:
 
@@ -26,6 +26,49 @@ JBrancher is for teams that want to keep their existing agent loop while making 
 This project is an early developer release. It is designed to measure whether a decision layer actually reduces cost or latency in a particular harness. It does not claim universal savings or act as a sandbox.
 
 ## Get started in 60 seconds
+
+### Wrap Claude Code
+
+Install the package and launch your existing native Claude Code CLI:
+
+```sh
+npm install github:henstarr/JBrancher
+# Set TYPESAFE_API_KEY in a local .env file, then:
+npx jbrancher wrap claude
+```
+
+The wrapper uses **shadow mode**: it observes proposed tool calls and scores them
+with Jev in the background. Claude's permissions and execution continue normally.
+It does not approve, deny, rewrite, or execute tools and avoids zero Claude calls.
+This release collects evidence for routing improvements; it does not accelerate Claude.
+
+```sh
+npx jbrancher wrap claude --mode shadow --max-evaluations 10 -- --resume
+# Diagnose the launch without any TypeSafe requests:
+npx jbrancher wrap claude --max-evaluations 0 -- --version
+```
+
+Requires a native Claude Code installation supporting HTTP hooks and `--settings`.
+Claude flags follow `--`. The wrapper uses a temporary settings file and an
+authenticated loopback hook server; global and project settings files are never edited.
+`--settings`, `--bare`, and `--safe-mode` are rejected because they conflict with
+the wrapper. Managed policies or disabled hooks can prevent observation; check the
+printed `observed` count after exiting. A zero count does not demonstrate integration.
+
+**Data and budget:** the latest user prompt (up to 16,000 characters) and proposed
+tool arguments are sent to TypeSafe for at most 25 evaluations per launch by default.
+Repository files and transcripts are not read. Scores have limited context and are
+not permission judgments. Calls use a 3-second timeout and at most two concurrent
+requests; events without a matching prompt or over budget are skipped. Resumed and
+subagent events may lack prompt context and are then skipped. There are no retries.
+Local JSONL files under `~/.jbrancher/sessions/` contain scores, timing, errors as
+status codes, and summary counts, without prompts or tool arguments. The summary
+reports `logErrors` if a score could not be saved. Normal exit removes temporary
+settings; force-killing the wrapper may leave a temporary file with a stale local token.
+
+See [Claude wrapper validation and limitations](docs/claude-wrapper.md).
+
+### Wrap your own harness
 
 Install JBrancher directly from GitHub:
 
