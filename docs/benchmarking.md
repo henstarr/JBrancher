@@ -130,3 +130,17 @@ The prediction-generation loop should log routing telemetry separately from the 
 ## What would count as a win?
 
 A credible result is not “Jev scored highly.” It is a paired result such as: the same task set has no statistically meaningful drop in success, while actor calls and cost per successful task decrease, or latency improves at the same success rate. If success drops, keep the mode behind a threshold or use JBrancher only for low-risk transitions.
+
+## Token optimization hill climb
+
+The context optimizer has a local, synthetic regression benchmark:
+
+```sh
+npm run bench:tokens
+```
+
+It searches relevance thresholds and context budgets, accepting only configurations
+that preserve the fixture's required context and improve estimated frontier tokens.
+The benchmark is deliberately not a frontier-quality claim. For a real run, include
+the Jev request's `inputTokens` and `outputTokens` in the total. A selector that saves
+frontier tokens but costs more in Jev tokens is not an optimization.

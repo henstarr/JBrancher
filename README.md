@@ -113,6 +113,44 @@ await harness.execute(decision.action, { task, state, history });
 
 Your actor remains the fallback. JBrancher only selects from the candidates returned by your harness.
 
+### Reduce context tokens before a model call
+
+For large prompts, let Jev rank optional context while code enforces a hard token budget:
+
+```js
+import { optimizeContext } from 'jbrancher/context';
+import { createJevContextEvaluator } from 'jbrancher/jev';
+
+const compact = await optimizeContext({
+  task,
+  state: { repository: 'checkout-service' },
+  items: [
+    { id: 'task', text: task, tokens: 80, required: true },
+    { id: 'failing-test', text: testOutput, tokens: 420 },
+    { id: 'source', text: sourceFile, tokens: 900 },
+    { id: 'old-changelog', text: changelog, tokens: 700 }
+  ],
+  maxTokens: 1400,
+  minimumScore: 0.6,
+  evaluate: createJevContextEvaluator({
+    apiKey: process.env.TYPESAFE_API_KEY,
+    maxItemChars: 512
+  })
+});
+
+const prompt = compact.items.map(item => item.text).join('\n\n');
+```
+
+Required items are retained, optional items are ranked by relevance per estimated token,
+and unavailable Jev requests fall back to local priorities. The selector reports its
+estimated savings and TypeSafe usage so net savings can be measured. Token estimates are
+inputs supplied by the harness or a rough four-characters-per-token estimate; measure
+actual frontier usage in the target model. Run the local hill-climb benchmark with:
+
+```sh
+npm run bench:tokens
+```
+
 The offline demo makes no network requests and needs no API key:
 
 ```sh

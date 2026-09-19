@@ -18,10 +18,12 @@
     "demo": "node bin/jbrancher.js demo",
     "doctor": "node bin/jbrancher.js doctor",
     "live:smoke": "node bin/jbrancher.js live-check",
-    "bench:offline": "node benchmarks/run-routing.js"
+    "bench:offline": "node benchmarks/run-routing.js",
+    "bench:tokens": "node benchmarks/run-token-optimization.js"
   },
   "exports": {
     ".": "./src/index.js",
+    "./context": "./src/context.js",
     "./jev": "./src/jev.js",
     "./server": "./src/server.js"
   },
