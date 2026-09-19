@@ -6,6 +6,7 @@ import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createJBrancherServer } from '../src/server.js';
 import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
+import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 
 function loadDotEnv(file = resolve(process.cwd(), '.env')) {
   if (!existsSync(file)) return false;
@@ -22,6 +23,7 @@ function loadDotEnv(file = resolve(process.cwd(), '.env')) {
 }
 
 function printHelp() {
+  console.log('Codex batch: jbrancher wrap codex --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
   console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
 }
@@ -88,9 +90,10 @@ async function main() {
   if (command === 'help' || command === '--help' || command === '-h') return printHelp();
   if (command === 'demo') return import('../examples/demo.js');
   if (command === 'wrap') {
-    const options = parseClaudeArgs(process.argv.slice(3));
+    const isCodex = process.argv[3] === 'codex';
+    const options = (isCodex ? parseCodexArgs : parseClaudeArgs)(process.argv.slice(3));
     loadDotEnv();
-    process.exitCode = await wrapClaude(options);
+    process.exitCode = await (isCodex ? wrapCodex : wrapClaude)(options);
     return;
   }
   if (command === 'doctor') {

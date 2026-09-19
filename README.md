@@ -68,6 +68,26 @@ settings; force-killing the wrapper may leave a temporary file with a stale loca
 
 See [Claude wrapper validation and limitations](docs/claude-wrapper.md).
 
+### Wrap Codex (batch sessions)
+
+```sh
+# Uses your existing Codex login and a TYPESAFE_API_KEY in .env:
+npx jbrancher wrap codex --prompt "Read README.md and summarize the project" --max-evaluations 10 -- --sandbox read-only --ephemeral
+```
+
+This launches `codex exec --json`, preserving its JSONL stdout and exit status.
+Command events are scored in the background; permissions, hook trust, and config
+files are unchanged. Only command execution is observed—not MCP calls, file changes,
+or interactive/resumed sessions. This is shadow telemetry, not a speedup or tool gate.
+
+The initial prompt and command text are sent to TypeSafe (up to 16,000 characters
+each; oversized commands are skipped). The default cap is 25 evaluations, with
+two concurrent requests and a 3-second request timeout. `--max-evaluations 0`
+disables TypeSafe calls. Score logs exclude raw prompts and commands; **Codex's own
+stdout and session logs can contain them**. Do not publish raw event streams blindly.
+
+See [Codex wrapper validation and limitations](docs/codex-wrapper.md).
+
 ### Wrap your own harness
 
 Install JBrancher directly from GitHub:
