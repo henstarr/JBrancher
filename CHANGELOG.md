@@ -30,6 +30,8 @@
   replay latency; credentials remain outside the repository.
 - Refresh the checked-in live Codex proxy report with the latest real actor
   usage and cost comparison.
+- Add a dependency-free async Harbor-style loop that connects frontier choice,
+  environment execution, verification, and local route feedback.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

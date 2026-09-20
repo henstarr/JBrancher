@@ -530,6 +530,29 @@ The client uses only Python's standard library. It does not execute actions,
 choose a frontier model, or create an external database, which makes it usable
 inside a Harbor/Pi/custom harness adapter.
 
+For an async Harbor-style loop, use the included orchestration helper. It keeps
+the frontier callback and environment executor in your agent while handling
+JBrancher decisions, verification feedback, local episode recording, and
+learned-route recovery:
+
+```python
+from integrations.python import JBrancherHarborLoop, JBrancherProxy
+
+loop = JBrancherHarborLoop(JBrancherProxy(), source="my-harbor-agent")
+step = await loop.step(
+    instruction,
+    state,
+    candidates=legal_actions_or_none,
+    frontier=frontier_actor,
+    execute=execute_in_environment,
+    verify=verify_postcondition,
+)
+```
+
+The helper is Harbor-compatible but does not import Harbor, so it remains
+usable in any Python harness and is straightforward to call from Harbor's
+`BaseAgent.run()` method.
+
 ## Use in a harness
 
 ```js

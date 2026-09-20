@@ -279,15 +279,33 @@ JBrancher's local `POST /v1/decide` endpoint when it has a bounded candidate
 set, execute the selected action in Harbor's environment, and post the
 completed open-world trajectory to `POST /v1/episodes`. That makes unknown
 routes learnable without making the benchmark harness depend on a JavaScript
-runtime. JBrancher ships a dependency-free Python proxy client, but does not
-currently ship a Python `BaseAgent` class; the Harbor adapter remains harness-
-specific and this bridge is not an assertion that Harbor has already been run
-in this repository.
+runtime. JBrancher ships a dependency-free Python proxy client and an async
+`JBrancherHarborLoop`, but does not replace Harbor's `BaseAgent` class. The
+loop accepts the host's frontier callback, environment executor, and optional
+postcondition verifier, so a small `BaseAgent.run()` method can use it without
+adding a Harbor dependency to this package. This bridge is not an assertion
+that Harbor has already been run in this repository.
 
 When a task has no registered candidate set, the adapter may omit `candidates`
 or send `[]`. The proxy returns a safe `abstain/unmatched` decision; the
 frontier actor remains owned by the harness, and its completed tool trajectory
 becomes the next local dataset example.
+
+Minimal loop shape inside a Harbor agent:
+
+```python
+from integrations.python import JBrancherHarborLoop, JBrancherProxy
+
+loop = JBrancherHarborLoop(JBrancherProxy(), source="harbor-jbrancher")
+result = await loop.step(
+    instruction,
+    state,
+    candidates=legal_actions_or_none,
+    frontier=frontier_actor,
+    execute=environment_executor,
+    verify=postcondition_verifier,
+)
+```
 
 For learned decisions, include the returned `routeId` in the completion
 episode. A successful completion increments the local route's replay counter;

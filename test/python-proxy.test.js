@@ -23,8 +23,9 @@ test('dependency-free Python client completes the proxy learning loop', { skip: 
   const address = await service.listen({ port: 0 });
   const script = `
 import sys
+import asyncio
 sys.path.insert(0, sys.argv[2])
-from integrations.python import JBrancherProxy
+from integrations.python import JBrancherHarborLoop, JBrancherProxy
 
 proxy = JBrancherProxy(sys.argv[1])
 assert proxy.health()["learningConfigured"] is True
@@ -53,6 +54,37 @@ feedback = proxy.record_episode(
     route_id=decision["routeId"],
 )
 assert feedback["routeSuccessRecorded"] is True, feedback
+
+async def run_harness_loop():
+    loop = JBrancherHarborLoop(proxy, source="python-loop-test")
+    frontier_calls = []
+
+    async def frontier(decision):
+        frontier_calls.append(decision["source"])
+        return {"tool": "read", "args": {"path": "README.md"}}
+
+    async def execute(action):
+        return {"ok": True, "output": action["args"]["path"]}
+
+    for _ in range(2):
+        result = await loop.step(
+            "Inspect README.md",
+            {"ready": True},
+            frontier=frontier,
+            execute=execute,
+        )
+        assert result.source == "frontier", result
+    result = await loop.step(
+        "Inspect README.md",
+        {"ready": True},
+        candidates=[{"tool": "read", "args": {"path": "README.md"}}],
+        frontier=frontier,
+        execute=execute,
+    )
+    assert result.source == "learned", result
+    assert len(frontier_calls) == 2, frontier_calls
+
+asyncio.run(run_harness_loop())
 print("python-proxy-ok")
 `;
   try {
