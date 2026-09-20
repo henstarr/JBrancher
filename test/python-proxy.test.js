@@ -85,6 +85,37 @@ async def run_harness_loop():
     assert len(frontier_calls) == 2, frontier_calls
 
 asyncio.run(run_harness_loop())
+
+async def run_failure_recovery():
+    loop = JBrancherHarborLoop(proxy, source="python-recovery-test")
+    frontier_calls = []
+    executions = 0
+    action = {"tool": "read", "args": {"path": "CHANGELOG.md"}}
+
+    async def frontier(decision):
+        frontier_calls.append(decision["source"])
+        return action
+
+    async def execute(current_action):
+        nonlocal executions
+        executions += 1
+        return {"ok": executions != 3, "output": current_action["args"]["path"]}
+
+    for _ in range(2):
+        await loop.step("Inspect CHANGELOG.md", {}, frontier=frontier, execute=execute)
+    recovered = await loop.step(
+        "Inspect CHANGELOG.md",
+        {},
+        candidates=[action],
+        frontier=frontier,
+        execute=execute,
+    )
+    assert recovered.source == "frontier", recovered
+    assert recovered.recovered is True, recovered
+    assert frontier_calls == ["abstain", "abstain", "recovery"], frontier_calls
+    assert proxy.learning()["quarantinedRoutes"] >= 1
+
+asyncio.run(run_failure_recovery())
 print("python-proxy-ok")
 `;
   try {

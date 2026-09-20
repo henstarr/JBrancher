@@ -32,6 +32,8 @@
   usage and cost comparison.
 - Add a dependency-free async Harbor-style loop that connects frontier choice,
   environment execution, verification, and local route feedback.
+- Cover learned-route quarantine and frontier recovery in the cross-language
+  integration test.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.
