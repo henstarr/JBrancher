@@ -54,6 +54,8 @@
   real Jev usage reporting.
 - Check in the first live Pi preference result: 4 Jev calls reduced to 2 with
   100% verified learned-route coverage.
+- Add read-only preference inspection through `/jbrancher preferences` and
+  `jbrancher preferences`.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

@@ -122,6 +122,13 @@ the harness's responsibility. Measure the live cost effect with:
 npm run bench:live-pi-learning -- --instances 1 --repetitions 4
 ```
 
+Inspect preference status without editing it with `/jbrancher preferences` in
+Pi or:
+
+```sh
+npx jbrancher preferences --dir .jbrancher
+```
+
 ## Built-in routes
 
 The package includes conservative read-only routes for:

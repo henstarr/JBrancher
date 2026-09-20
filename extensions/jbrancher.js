@@ -347,6 +347,20 @@ export default async function jbrancherPiExtension(pi) {
         notify(ctx, `Exported ${dataset.examples.length} redacted episode(s) to ${dataset.path}.`);
         return;
       }
+      if (command === 'preferences') {
+        if (!runtime?.learning.enabled) {
+          notify(ctx, 'Enable local learning before inspecting route preferences.');
+          return;
+        }
+        const preferences = await runtime.learning.store.readPreferences();
+        const counts = preferences.reduce((result, preference) => {
+          const status = preference.status || 'unknown';
+          result[status] = (result[status] || 0) + 1;
+          return result;
+        }, {});
+        notify(ctx, `Pi route preferences: ${counts.active || 0} active, ${counts.candidate || 0} candidate, ${counts.quarantined || 0} quarantined.`);
+        return;
+      }
       if (command.startsWith('promote ')) {
         if (!runtime?.learning.enabled) {
           notify(ctx, 'Enable local learning before promoting routes.');
