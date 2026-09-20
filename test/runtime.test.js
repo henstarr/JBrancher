@@ -217,6 +217,30 @@ test('generic runtime can opt into postcondition-verified promotion for harness-
   }
 });
 
+test('generic runtime quarantines a learned single step when its postcondition fails', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-verified-failure-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const makeBrancher = learningOutcome => createJBrancher({
+      getCandidates: async () => [{ tool: 'write', args: { path: 'out.txt', content: 'ok' } }],
+      actor: async () => ({ action: { tool: 'write', args: { path: 'out.txt', content: 'ok' } } }),
+      execute: async () => ({ written: true }),
+      learningStore: store,
+      learningPromotionMode: 'verified',
+      learningOutcome
+    });
+    await makeBrancher(() => true).step({ task: 'write verified output' });
+    await makeBrancher(() => true).step({ task: 'write verified output' });
+    const result = await makeBrancher(() => false).step({ task: 'write verified output' });
+    assert.equal(result.decision.source, 'learned');
+    assert.equal(result.learningOutcome, 'unknown');
+    assert.equal(result.learnedRouteQuarantined, true);
+    assert.equal((await store.readRoutes())[0].status, 'quarantined');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic brancher replays a learned multi-step read workflow only when each step remains allowed', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-workflow-'));
   try {

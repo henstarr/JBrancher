@@ -247,6 +247,14 @@ export function createJBrancher({
     try {
       const event = await executeStep(input, recorder);
       const outcome = await validatedOutcome({ task: input.task, state: input.state, history: input.history, event, events: [event] });
+      if (event.decision.source === 'learned' && outcome && outcome !== 'success') {
+        if (typeof learningStore?.recordRouteFailure === 'function') {
+          await learningStore.recordRouteFailure(event.decision.routeId, {
+            reason: 'Harness postcondition rejected learned step'
+          }).catch(() => {});
+        }
+        return { ...event, learningOutcome: outcome, learnedRouteQuarantined: true };
+      }
       await finishRecorder(recorder, {
         ...(outcome ? { outcome } : {}),
         metadata: {
