@@ -26,6 +26,9 @@
 - Add open-world local learning: successful non-registered fallback episodes are
   captured as dataset rows and reviewable candidates on first observation, while
   automatic execution still requires repeated safe evidence.
+- Record generic no-tool fallback episodes as non-reusable dataset evidence and
+  assign dataset splits from stable task/action fingerprints for reliable
+  holdout evaluation across repeated runs.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

@@ -390,16 +390,28 @@ function datasetSplit(id) {
   return bucket === 0 ? 'test' : bucket < 3 ? 'validation' : 'train';
 }
 
+function datasetFingerprint(task, toolCalls) {
+  return hash(JSON.stringify(stable({
+    task: normalizeTask(task),
+    actions: (toolCalls || []).map(call => ({
+      toolName: call?.toolName || '',
+      input: redactValue(call?.input)
+    }))
+  })));
+}
+
 export function traceToDatasetExample(trace) {
   if (!trace || typeof trace.task !== 'string') throw new TypeError('Dataset examples require a task');
   const task = redactText(trace.task, 4000);
   const toolCalls = redactValue(trace.toolCalls || []);
   const safety = trace.safety || classifyTraceSafety(toolCalls);
   const id = trace.id || hash(`${task}\n${JSON.stringify(toolCalls)}`);
+  const fingerprint = datasetFingerprint(task, toolCalls);
   return {
     schemaVersion: 1,
     exampleId: id,
-    split: datasetSplit(id),
+    fingerprint,
+    split: datasetSplit(fingerprint),
     task,
     taskNormalized: trace.taskNormalized || normalizeTask(task),
     steps: toolCalls,

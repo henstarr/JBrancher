@@ -136,9 +136,10 @@ The local loop is deliberately conservative:
    tool outcomes. This is the dataset-building path for routes that are not
    registered ahead of time.
 3. `/jbrancher dataset` regenerates `.jbrancher/dataset.jsonl`; examples are
-redacted, labeled with outcome and safety, and assigned stable train,
-validation, or test splits. Dataset rows also retain redacted harness context
-metadata, such as the initial state supplied by a generic runtime, so future
+   redacted, labeled with outcome and safety, and assigned stable train,
+   validation, or test splits using a fingerprint of the normalized task and
+   action shape. Dataset rows also retain redacted harness context
+   metadata, such as the initial state supplied by a generic runtime, so future
 offline mining can distinguish the same task under different states.
 4. `/jbrancher candidates` mines successful workflows. The first successful
    unknown episode becomes a reviewable candidate immediately; repeated

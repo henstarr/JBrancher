@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -120,6 +120,22 @@ test('the learning recorder is harness-neutral and writes one episode dataset ro
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('dataset fingerprints and splits remain stable across repeated episodes', () => {
+  const first = traceToDatasetExample({
+    id: 'episode-a',
+    task: 'Read package.json',
+    toolCalls: [{ toolCallId: 'call-a', toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  const repeated = traceToDatasetExample({
+    id: 'episode-b',
+    task: 'Read package.json',
+    toolCalls: [{ toolCallId: 'call-b', toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  assert.equal(first.fingerprint, repeated.fingerprint);
+  assert.equal(first.split, repeated.split);
+  assert.notEqual(first.exampleId, repeated.exampleId);
 });
 
 test('safe inspection commands can be learned while shell escapes and sensitive paths stay unsafe', () => {
