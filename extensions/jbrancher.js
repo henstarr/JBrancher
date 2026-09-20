@@ -243,7 +243,8 @@ export default async function jbrancherPiExtension(pi) {
       await learning.store.writeDataset();
       if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
         const routes = await learning.store.refreshCandidates({
-          minimumObservations: Number(config.minimumObservations || 2)
+          minimumObservations: Number(config.minimumObservations || 2),
+          minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
         const promotable = routes.filter(route => route.status === 'candidate'
           && route.safety === 'read-only'
@@ -281,7 +282,8 @@ export default async function jbrancherPiExtension(pi) {
           return;
         }
         const routes = await runtime.learning.store.refreshCandidates({
-          minimumObservations: Number(config.minimumObservations || 2)
+          minimumObservations: Number(config.minimumObservations || 2),
+          minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
         const candidates = routes.filter(route => route.status === 'candidate');
         notify(ctx, candidates.length

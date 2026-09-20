@@ -144,7 +144,7 @@ JBRANCHER_PI_MODE=learning pi -e .
 Traces and route candidates stay in the project-local, ignored `.jbrancher/`
 directory. JBrancher records redacted tool observations, proposes routes after
 repeated successful traces, and automatically promotes only exact read-only
-routes:
+or conservatively generalized read-only routes:
 
 ```text
 frontier fallback → redacted local trace → repeated candidate → promotion → fast path

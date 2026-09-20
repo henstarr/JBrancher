@@ -74,6 +74,31 @@ test('learning can replay a repeated read-only workflow with multiple steps', as
   }
 });
 
+test('learning generalizes repeated read workflows across conservative paraphrases', async () => {
+  const traces = ['read package.json', 'read package.json', 'open package.json', 'open package.json']
+    .map((task, index) => ({
+      id: String(index),
+      task,
+      outcome: 'success',
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    }));
+  const [candidate] = proposeRoutes(traces);
+  assert.equal(candidate.matcher.type, 'token-similarity');
+  assert.equal(candidate.observations, 4);
+
+  candidate.status = 'active';
+  const router = createPiRouter({ routes: createLearnedRoutes([candidate]) });
+  const generalized = await router.handle({
+    task: 'show package.json',
+    readFile: async path => `contents of ${path}`
+  });
+  assert.equal(generalized.source, 'deterministic');
+  assert.equal(generalized.result, 'contents of package.json');
+
+  const unrelated = await router.decide({ task: 'read license file' });
+  assert.equal(unrelated.source, 'frontier');
+});
+
 test('learning proposals ignore failed traces and unsafe actions', () => {
   const traces = [
     { task: 'delete the build', taskNormalized: 'delete the build', outcome: 'success', toolCalls: [{ toolName: 'bash', input: { command: 'rm -rf build' } }] },

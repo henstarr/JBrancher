@@ -2,9 +2,17 @@ import { appendFile, mkdir, readFile as readTextFile, rename, writeFile } from '
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-const clone = value => structuredClone(value);
 const SECRET_KEY = /(api[_-]?key|token|password|secret|authorization|cookie)/i;
 const SECRET_VALUE = /(Bearer\s+)[A-Za-z0-9._~+/=-]+|(?:sk|key|apikey)[_-][A-Za-z0-9_-]{16,}/gi;
+const ROUTE_STOP_WORDS = new Set([
+  'a', 'an', 'and', 'are', 'can', 'do', 'for', 'from', 'how', 'i', 'in', 'is',
+  'it', 'me', 'my', 'of', 'on', 'or', 'please', 'tell', 'that', 'the', 'this',
+  'to', 'what', 'where', 'with', 'you'
+]);
+const ROUTE_ACTION_WORDS = new Set([
+  'check', 'display', 'find', 'get', 'inspect', 'list', 'look', 'open', 'read',
+  'show', 'view'
+]);
 
 export function redactText(value, maxChars = 2000) {
   if (typeof value !== 'string') return value;
@@ -25,6 +33,21 @@ export function redactValue(value, depth = 0) {
 export function normalizeTask(value) {
   if (typeof value !== 'string') throw new TypeError('A task string is required');
   return redactText(value, 4000).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function taskTokens(value) {
+  return new Set(normalizeTask(value)
+    .split(/[^a-z0-9]+/)
+    .filter(token => token.length > 1 && !ROUTE_STOP_WORDS.has(token) && !ROUTE_ACTION_WORDS.has(token)));
+}
+
+export function taskSimilarity(left, right) {
+  const leftTokens = taskTokens(left);
+  const rightTokens = taskTokens(right);
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0;
+  let intersection = 0;
+  for (const token of leftTokens) if (rightTokens.has(token)) intersection++;
+  return intersection / Math.max(leftTokens.size, rightTokens.size);
 }
 
 function stable(value) {
@@ -88,6 +111,16 @@ function actionsFromRecord(record) {
   return [];
 }
 
+function matchesStoredMatcher(matcher, task) {
+  const normalized = normalizeTask(task);
+  if (matcher?.type === 'normalized-exact') return normalized === matcher.value;
+  if (matcher?.type === 'token-similarity' && Array.isArray(matcher.values)) {
+    const minimumScore = Number.isFinite(matcher.minimumScore) ? matcher.minimumScore : 0.8;
+    return matcher.values.some(value => taskSimilarity(normalized, value) >= minimumScore);
+  }
+  return false;
+}
+
 async function executeAction(action, { exec, readFile }) {
   if (action.toolName === 'read' && typeof action.input?.path === 'string') {
     if (typeof readFile !== 'function') throw new Error('Pi read execution is unavailable');
@@ -105,10 +138,10 @@ async function executeAction(action, { exec, readFile }) {
 }
 
 function routeFromRecord(record) {
-  if (record.status !== 'active' || record.matcher?.type !== 'normalized-exact') return null;
+  if (record.status !== 'active') return null;
   const actions = actionsFromRecord(record);
   if (actions.length === 0 || actions.some(action => classifyActionSafety(action.toolName, action.input) !== 'read-only')) return null;
-  const match = ({ task }) => normalizeTask(task) === record.matcher.value;
+  const match = ({ task }) => matchesStoredMatcher(record.matcher, task);
 
   return {
     id: record.id,
@@ -128,39 +161,60 @@ export function createLearnedRoutes(records = []) {
   return records.map(routeFromRecord).filter(Boolean);
 }
 
-export function proposeRoutes(traces, { minimumObservations = 2 } = {}) {
+export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
   if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
-  const groups = new Map();
+  const actionGroups = new Map();
   for (const trace of traces) {
     if (!trace || trace.outcome !== 'success' || !Array.isArray(trace.toolCalls) || trace.toolCalls.length === 0) continue;
     if (trace.toolCalls.some(call => !call?.toolName || !call.input || call.ok === false)) continue;
     const taskNormalized = trace.taskNormalized || normalizeTask(trace.task || '');
     const actions = trace.toolCalls.map(call => ({ toolName: call.toolName, input: redactValue(call.input) }));
-    const key = `${taskNormalized}\n${JSON.stringify(actions.map(action => actionKey(action.toolName, action.input)))}`;
-    const group = groups.get(key) || { traces: [], actions };
-    group.taskNormalized = taskNormalized;
-    group.traces.push(trace);
-    groups.set(key, group);
+    const actionSignature = JSON.stringify(actions.map(action => actionKey(action.toolName, action.input)));
+    const actionGroup = actionGroups.get(actionSignature) || { actions, variants: new Map() };
+    const variant = actionGroup.variants.get(taskNormalized) || { taskNormalized, traces: [] };
+    variant.traces.push(trace);
+    actionGroup.variants.set(taskNormalized, variant);
+    actionGroups.set(actionSignature, actionGroup);
   }
 
-  return [...groups.values()]
-    .filter(group => group.traces.length >= minimumObservations)
-    .map(group => {
-      const first = group.traces[0];
-      const safety = classifyTraceSafety(group.actions);
-      return {
-        schemaVersion: 1,
-        id: `learned-${hash(`${group.taskNormalized}\n${JSON.stringify(group.actions)}`)}`,
-        status: 'candidate',
-        matcher: { type: 'normalized-exact', value: group.taskNormalized },
-        action: group.actions.length === 1 ? group.actions[0] : { actions: group.actions },
-        safety,
-        observations: group.traces.length,
-        examples: group.traces.slice(-5).map(trace => trace.task),
-        firstSeen: group.traces[0].createdAt,
-        lastSeen: group.traces.at(-1).createdAt
-      };
-    });
+  const candidates = [];
+  for (const actionGroup of actionGroups.values()) {
+    const variants = [...actionGroup.variants.values()];
+    const clusters = [];
+    for (const variant of variants) {
+      const cluster = clusters.find(item => item.variants.some(existing => taskSimilarity(existing.taskNormalized, variant.taskNormalized) >= minimumSimilarity));
+      if (cluster) cluster.variants.push(variant);
+      else clusters.push({ variants: [variant] });
+    }
+
+    for (const cluster of clusters) {
+      const generalized = cluster.variants.length > 1
+        && cluster.variants.every(variant => variant.traces.length >= minimumObservations);
+      const outputVariants = generalized ? [cluster.variants] : cluster.variants.map(variant => [variant]);
+      for (const selectedVariants of outputVariants) {
+        const selectedTraces = selectedVariants.flatMap(variant => variant.traces);
+        if (selectedTraces.length < minimumObservations) continue;
+        const taskValues = selectedVariants.map(variant => variant.taskNormalized);
+        const matcher = generalized
+          ? { type: 'token-similarity', values: taskValues, minimumScore: minimumSimilarity }
+          : { type: 'normalized-exact', value: taskValues[0] };
+        const safety = classifyTraceSafety(actionGroup.actions);
+        candidates.push({
+          schemaVersion: 1,
+          id: `learned-${hash(`${JSON.stringify(matcher)}\n${JSON.stringify(actionGroup.actions)}`)}`,
+          status: 'candidate',
+          matcher,
+          action: actionGroup.actions.length === 1 ? actionGroup.actions[0] : { actions: actionGroup.actions },
+          safety,
+          observations: selectedTraces.length,
+          examples: selectedTraces.slice(-5).map(trace => trace.task),
+          firstSeen: selectedTraces[0].createdAt,
+          lastSeen: selectedTraces.at(-1).createdAt
+        });
+      }
+    }
+  }
+  return candidates;
 }
 
 function datasetSplit(id) {

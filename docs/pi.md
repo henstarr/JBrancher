@@ -144,9 +144,12 @@ The local loop is deliberately conservative:
    is available for explicit manual promotion.
 6. The active route can answer the same prompt without a frontier turn.
 
-Learned routes currently support exact normalized prompts for one or more
-repeated `read` actions and a small allowlist of read-only `bash` commands.
-Other actions remain in the dataset but are candidate or fallback-only; this
+Learned routes currently support exact normalized prompts and conservative
+token-similarity matches for one or more repeated `read` actions, plus a small
+allowlist of read-only `bash` commands. Similarity generalization requires
+repeated evidence for each observed phrasing and defaults to an 0.8 score
+threshold; tune it with `minimumSimilarity` when configuring a project. Other
+actions remain in the dataset but are candidate or fallback-only; this
 prevents learning from silently replaying writes, deletes, deployments, or
 arbitrary shell commands. The trace store is local and ignored by Git, so users
 can delete `.jbrancher/` to reset learning. Set
