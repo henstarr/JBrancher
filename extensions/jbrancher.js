@@ -68,6 +68,9 @@ async function readProjectFile(cwd, filePath, offset = 0, limit) {
   const absolute = resolve(cwd, filePath);
   const relativePath = relative(root, absolute);
   if (relativePath.startsWith('..') || relativePath.includes(':')) throw new Error('Learned reads must stay inside the project');
+  if (/(^|[\\/])(?:\.env(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|.*\.(?:pem|key|p12|pfx))$/i.test(relativePath)) {
+    throw new Error('Learned reads refuse sensitive files');
+  }
   const contents = await readTextFile(absolute, 'utf8');
   const lines = contents.split(/\r?\n/);
   const start = Number.isSafeInteger(offset) && offset > 0 ? offset : 0;

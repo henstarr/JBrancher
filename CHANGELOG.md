@@ -14,7 +14,7 @@
   shadow mode, and frontier fallback on uncertainty or failure.
 - Add local Pi learning mode with redacted JSONL traces, repeated-workflow
   candidate mining, conservative paraphrase generalization, automatic read-only
-  promotion, and a SWE-bench Lite routing replay.
+  promotion, guarded path templates, and a SWE-bench Lite routing replay.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

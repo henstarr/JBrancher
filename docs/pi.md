@@ -147,14 +147,20 @@ The local loop is deliberately conservative:
 Learned routes currently support exact normalized prompts and conservative
 token-similarity matches for one or more repeated `read` actions, plus a small
 allowlist of read-only `bash` commands. Similarity generalization requires
-repeated evidence for each observed phrasing and defaults to an 0.8 score
-threshold; tune it with `minimumSimilarity` when configuring a project. Other
+repeated evidence for each observed phrasing and defaults to a similarity score
+of 0.8; tune it with `minimumSimilarity` when configuring a project. Other
 actions remain in the dataset but are candidate or fallback-only; this
 prevents learning from silently replaying writes, deletes, deployments, or
 arbitrary shell commands. The trace store is local and ignored by Git, so users
 can delete `.jbrancher/` to reset learning. Set
 `autoPromoteReadOnly: false` in `jbrancher.config.js` if you want every
 candidate to require manual promotion.
+
+When two successful traces read different explicitly named project files,
+JBrancher can also promote a guarded path template. A later request such as
+`inspect src/index.js` can read that new relative path without a frontier turn;
+the template rejects write/delete language, traversal, absolute paths, and
+common secret/key files.
 
 Run the local replay benchmark:
 

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
@@ -126,6 +126,47 @@ test('Pi learning mode records fallback tool use and auto-promotes repeated safe
     assert.equal(routes.length, 1);
     assert.equal(routes[0].status, 'active');
     assert.equal(routes[0].safety, 'read-only');
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Pi learning mode promotes a path template and handles a new file request', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-path-learning-test-'));
+  await writeFile(join(directory, 'src-index.js'), 'export default true;\n', 'utf8');
+  const handlers = new Map();
+  const messages = [];
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage(message) { messages.push(message); },
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    for (const [id, task, path] of [
+      ['one', 'read package.json', 'package.json'],
+      ['two', 'open README.md', 'README.md']
+    ]) {
+      await handlers.get('input')({ text: task, source: 'interactive' }, ctx);
+      await handlers.get('tool_call')({ toolCallId: id, toolName: 'read', input: { path } }, ctx);
+      await handlers.get('tool_result')({ toolCallId: id, isError: false, content: [{ type: 'text', text: 'ok' }] }, ctx);
+      await handlers.get('agent_end')({}, ctx);
+    }
+    const handled = await handlers.get('input')({ text: 'inspect src-index.js', source: 'interactive' }, ctx);
+    assert.deepEqual(handled, { action: 'handled' });
+    assert.match(messages.at(-1).content, /export default true/);
   } finally {
     if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
     else process.env.JBRANCHER_PI_MODE = previousMode;

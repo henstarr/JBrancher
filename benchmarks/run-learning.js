@@ -65,15 +65,44 @@ async function benchmarkInstance(instance, store) {
   return { instance_id: instance.instance_id, frontierCalls, handled, savedPromptTokens, rows };
 }
 
+async function benchmarkPathTemplate(store) {
+  const warmup = [
+    ['read package.json', 'package.json'],
+    ['open README.md', 'README.md']
+  ];
+  for (const [task, path] of warmup) {
+    await store.appendTrace({ task, cwd: '/path-template-fixture', toolCalls: [{
+      toolName: 'read', input: { path }, ok: true
+    }], outcome: 'success' });
+  }
+  const routes = await store.refreshCandidates({ minimumObservations: 2 });
+  for (const route of routes.filter(item => item.status === 'candidate' && item.matcher?.type === 'read-path')) {
+    await store.promote(route.id);
+  }
+  const router = createPiRouter({ routes: createLearnedRoutes(await store.readRoutes()) });
+  const result = await router.handle({
+    task: 'inspect src/index.js',
+    readFile: async path => `fixture contents for ${path}`
+  });
+  return {
+    warmupFrontierCalls: warmup.length,
+    unseenPathSource: result.source,
+    unseenPathHandled: result.source === 'deterministic',
+    unseenPathResult: result.result
+  };
+}
+
 const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-swebench-learning-'));
 try {
-  const store = createLocalLearningStore({ directory });
+  const store = createLocalLearningStore({ directory: join(directory, 'swebench') });
+  const pathTemplateStore = createLocalLearningStore({ directory: join(directory, 'path-template') });
   const rows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
   const baselineFrontierCalls = fixture.instances.length * repetitions;
   const learnedFrontierCalls = rows.reduce((sum, row) => sum + row.frontierCalls, 0);
   const savedPromptTokens = rows.reduce((sum, row) => sum + row.savedPromptTokens, 0);
   const outcomes = rows.flatMap(row => row.rows);
+  const pathTemplate = await benchmarkPathTemplate(pathTemplateStore);
   console.log(JSON.stringify({
     benchmark: 'JBrancher local learning replay on SWE-bench Lite bug prompts',
     source: { url: fixture.sourceUrl, instances: fixture.instances.length, repetitions, warmupAttempts, retrievedAt: fixture.retrievedAt },
@@ -95,6 +124,7 @@ try {
       frontierCallReduction: Number(((baselineFrontierCalls - learnedFrontierCalls) / baselineFrontierCalls).toFixed(3)),
       estimatedPromptTokensSaved: savedPromptTokens
     },
+    pathTemplate,
     rows
   }, null, 2));
 } finally {

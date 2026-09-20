@@ -99,6 +99,24 @@ test('learning generalizes repeated read workflows across conservative paraphras
   assert.equal(unrelated.source, 'frontier');
 });
 
+test('learning can bind a safe read route to a new relative path', async () => {
+  const traces = [
+    { task: 'read package.json', outcome: 'success', toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }] },
+    { task: 'open README.md', outcome: 'success', toolCalls: [{ toolName: 'read', input: { path: 'README.md' }, ok: true }] }
+  ];
+  const [candidate] = proposeRoutes(traces);
+  assert.equal(candidate.matcher.type, 'read-path');
+  candidate.status = 'active';
+  const router = createPiRouter({ routes: createLearnedRoutes([candidate]) });
+  const result = await router.handle({
+    task: 'inspect src/index.js',
+    readFile: async path => `contents of ${path}`
+  });
+  assert.equal(result.source, 'deterministic');
+  assert.equal(result.result, 'contents of src/index.js');
+  assert.equal((await router.decide({ task: 'delete secrets.pem' })).source, 'frontier');
+});
+
 test('learning proposals ignore failed traces and unsafe actions', () => {
   const traces = [
     { task: 'delete the build', taskNormalized: 'delete the build', outcome: 'success', toolCalls: [{ toolName: 'bash', input: { command: 'rm -rf build' } }] },
@@ -122,4 +140,15 @@ test('unsafe candidates require explicit force to promote', async () => {
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('sensitive or out-of-project reads are never replayable learned routes', () => {
+  const traces = [
+    { task: 'read .env', outcome: 'success', toolCalls: [{ toolName: 'read', input: { path: '.env' }, ok: true }] },
+    { task: 'read .env', outcome: 'success', toolCalls: [{ toolName: 'read', input: { path: '.env' }, ok: true }] }
+  ];
+  const [candidate] = proposeRoutes(traces);
+  assert.equal(candidate.safety, 'side-effect-or-unknown');
+  candidate.status = 'active';
+  assert.deepEqual(createLearnedRoutes([candidate]), []);
 });

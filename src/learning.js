@@ -13,6 +13,9 @@ const ROUTE_ACTION_WORDS = new Set([
   'check', 'display', 'find', 'get', 'inspect', 'list', 'look', 'open', 'read',
   'show', 'view'
 ]);
+const READ_INTENT = /\b(read|open|show|view|inspect|display|look|list|cat|contents?|inside)\b/i;
+const WRITE_INTENT = /\b(delete|remove|write|edit|modify|change|update|create|run|execute|deploy|install)\b/i;
+const SENSITIVE_READ_PATH = /(^|[\\/])(?:\.env(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|.*\.(?:pem|key|p12|pfx))$/i;
 
 export function redactText(value, maxChars = 2000) {
   if (typeof value !== 'string') return value;
@@ -50,6 +53,26 @@ export function taskSimilarity(left, right) {
   return intersection / Math.max(leftTokens.size, rightTokens.size);
 }
 
+function normalizePath(value) {
+  return String(value).replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
+}
+
+function safeRelativeReadPath(value) {
+  if (typeof value !== 'string' || !value || value.includes('\0')) return false;
+  if (/^(?:[a-z]:[\\/]|[\\/]{1,2})/i.test(value)) return false;
+  if (value.split(/[\\/]/).includes('..')) return false;
+  return !SENSITIVE_READ_PATH.test(value);
+}
+
+function extractPathFromTask(task) {
+  if (typeof task !== 'string' || !READ_INTENT.test(task) || WRITE_INTENT.test(task)) return null;
+  const matches = task.match(/(?:\.\.?[\\/])?(?:[A-Za-z0-9_.-]+[\\/])*[A-Za-z0-9_.-]+\.[A-Za-z0-9_-]+/g) || [];
+  const path = matches
+    .map(value => value.replace(/^[`'\"]|[`'\"),.;:!?]+$/g, ''))
+    .find(value => safeRelativeReadPath(value));
+  return path || null;
+}
+
 function stable(value) {
   if (Array.isArray(value)) return value.map(stable);
   if (!value || typeof value !== 'object') return value;
@@ -65,7 +88,9 @@ function actionKey(toolName, input) {
 }
 
 export function classifyActionSafety(toolName, input = {}) {
-  if (toolName === 'read' && typeof input.path === 'string') return 'read-only';
+  if (toolName === 'read' && typeof input.path === 'string') {
+    return safeRelativeReadPath(input.path) ? 'read-only' : 'side-effect-or-unknown';
+  }
   if (toolName === 'ls' || toolName === 'find' || toolName === 'grep') return 'read-only';
   if (toolName === 'bash' && typeof input.command === 'string') {
     const command = input.command.trim();
@@ -118,6 +143,11 @@ function matchesStoredMatcher(matcher, task) {
     const minimumScore = Number.isFinite(matcher.minimumScore) ? matcher.minimumScore : 0.8;
     return matcher.values.some(value => taskSimilarity(normalized, value) >= minimumScore);
   }
+  if (matcher?.type === 'read-path') {
+    const path = extractPathFromTask(task);
+    if (!path || matcher.exactTasks?.includes(normalized)) return false;
+    return !matcher.exactPaths?.includes(normalizePath(path));
+  }
   return false;
 }
 
@@ -139,6 +169,24 @@ async function executeAction(action, { exec, readFile }) {
 
 function routeFromRecord(record) {
   if (record.status !== 'active') return null;
+
+  if (record.matcher?.type === 'read-path') {
+    const action = record.action;
+    if (action?.toolName !== 'read' || !action.input || record.safety !== 'read-only') return null;
+    const match = ({ task }) => matchesStoredMatcher(record.matcher, task);
+    return {
+      id: record.id,
+      description: `Learned parameterized file read (${record.observations} observations)`,
+      match,
+      run: async ({ task, readFile }) => {
+        if (typeof readFile !== 'function') throw new Error('Pi read execution is unavailable');
+        const path = extractPathFromTask(task);
+        if (!path) throw new Error('No safe relative file path found in the task');
+        return readFile(path, action.input.offset, action.input.limit);
+      }
+    };
+  }
+
   const actions = actionsFromRecord(record);
   if (actions.length === 0 || actions.some(action => classifyActionSafety(action.toolName, action.input) !== 'read-only')) return null;
   const match = ({ task }) => matchesStoredMatcher(record.matcher, task);
@@ -214,7 +262,46 @@ export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilari
       }
     }
   }
-  return candidates;
+  return [...candidates, ...proposeReadPathRoutes(traces, { minimumObservations })];
+}
+
+function proposeReadPathRoutes(traces, { minimumObservations = 2 } = {}) {
+  const groups = new Map();
+  for (const trace of traces) {
+    if (!trace || trace.outcome !== 'success' || !Array.isArray(trace.toolCalls) || trace.toolCalls.length !== 1) continue;
+    const call = trace.toolCalls[0];
+    if (call?.toolName !== 'read' || call.ok === false || typeof call.input?.path !== 'string') continue;
+    const taskPath = extractPathFromTask(trace.task);
+    if (!taskPath || normalizePath(taskPath) !== normalizePath(call.input.path)) continue;
+    const action = { toolName: 'read', input: {
+      ...(call.input.offset === undefined ? {} : { offset: call.input.offset }),
+      ...(call.input.limit === undefined ? {} : { limit: call.input.limit })
+    } };
+    const key = actionKey(action.toolName, action.input);
+    const group = groups.get(key) || { action, traces: [], paths: new Set() };
+    group.traces.push(trace);
+    group.paths.add(normalizePath(call.input.path));
+    groups.set(key, group);
+  }
+
+  return [...groups.values()]
+    .filter(group => group.traces.length >= minimumObservations && group.paths.size >= 2)
+    .map(group => {
+      const exactTasks = group.traces.map(trace => trace.taskNormalized || normalizeTask(trace.task));
+      const exactPaths = [...group.paths];
+      return {
+        schemaVersion: 1,
+        id: `learned-${hash(`read-path\n${JSON.stringify(group.action)}\n${exactPaths.join('\n')}`)}`,
+        status: 'candidate',
+        matcher: { type: 'read-path', exactTasks, exactPaths },
+        action: group.action,
+        safety: 'read-only',
+        observations: group.traces.length,
+        examples: group.traces.slice(-5).map(trace => trace.task),
+        firstSeen: group.traces[0].createdAt,
+        lastSeen: group.traces.at(-1).createdAt
+      };
+    });
 }
 
 function datasetSplit(id) {

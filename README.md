@@ -158,6 +158,10 @@ stable train/validation/test split. This gives you a private, incrementally
 built dataset without an external database. Use `/jbrancher dataset` to
 regenerate it after importing or editing traces.
 
+After observing two successful reads of different explicitly named project
+files, JBrancher may also learn a guarded path template and handle a new safe
+relative file request without a frontier turn.
+
 Use `/jbrancher candidates` to inspect candidates and `/jbrancher promote <id>`
 for explicit promotion. Unknown or side-effecting actions remain fallback-only
 until explicitly configured. Run the local SWE-bench Lite replay
