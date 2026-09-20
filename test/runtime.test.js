@@ -158,6 +158,38 @@ test('generic runtime exposes a first fallback as a candidate without activating
   }
 });
 
+test('generic runtime can learn successful Jev decisions and bypass Jev on reuse', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-jev-learning-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let evaluatorCalls = 0;
+    const brancher = createJBrancher({
+      getCandidates: async () => [{ tool: 'read', args: { path: 'README.md' } }],
+      evaluate: async () => {
+        evaluatorCalls++;
+        return { scores: [0.98] };
+      },
+      actor: async () => ({ action: { tool: 'read', args: { path: 'README.md' } } }),
+      execute: async () => 'ok',
+      learningStore: store,
+      learningOnlyFallback: false
+    });
+
+    const first = await brancher.step({ task: 'Read README.md' });
+    const second = await brancher.step({ task: 'Read README.md' });
+    const third = await brancher.step({ task: 'Read README.md' });
+
+    assert.equal(first.decision.source, 'jev');
+    assert.equal(second.decision.source, 'jev');
+    assert.equal(third.decision.source, 'learned');
+    assert.equal(evaluatorCalls, 2);
+    assert.equal((await store.readTraces()).length, 2);
+    assert.equal((await store.readRoutes())[0].status, 'active');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic runtime records an unregistered no-tool fallback as dataset evidence', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-empty-learning-'));
   try {

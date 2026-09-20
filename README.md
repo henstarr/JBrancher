@@ -263,6 +263,13 @@ const brancher = createJBrancher({
 });
 ```
 
+If you also want successful Jev-selected actions to become local fast paths,
+set `learningOnlyFallback: false`. JBrancher records actor, Jev, and rule
+decisions that execute successfully, promotes only safe or postcondition-verified
+routes, and bypasses Jev on later authorized repeats. Already-learned replays
+are not recorded again, so the local dataset does not grow from its own cache
+hits.
+
 The harness still authorizes every action: a learned action is used only when
 it matches the current task and is present in the candidate set returned by
 `getCandidates`. Otherwise the normal Jev/actor path runs. Learning is local,
@@ -473,6 +480,19 @@ npm run bench:learning -- --assert
 ```
 
 It compares actor-only, rules-plus-actor, and rules-plus-Jev-plus-actor on a fixed fixture. This measures decision accuracy, actor calls avoided, fallback coverage, and evaluator calls without making paid requests. It is a wiring and regression benchmark, not evidence that Jev improves every task.
+
+With `TYPESAFE_API_KEY` in the ignored `.env`, measure real provider usage on a
+small repeated SWE-bench prompt:
+
+```sh
+npm run bench:live-learning
+# Bound the run explicitly when experimenting:
+npm run bench:live-learning -- --instances 2 --repetitions 4
+```
+
+This makes a bounded live request only for the warm-up decisions, then reports
+actual Jev input/output usage and the authorized local-route coverage. It does
+not run the official SWE-bench grader or print credentials.
 
 For end-to-end evidence, use the same agent, model, task set, Docker image, timeout, and retry budget in paired runs. The recommended progression is:
 

@@ -1,27 +1,13 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createLocalLearningStore, refreshAndPromoteReadOnly } from '../src/learning.js';
+import { loadDotEnv } from '../src/env.js';
 import { createJBrancherServer } from '../src/server.js';
 import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
 import { parseCodexArgs, wrapCodex } from '../src/codex.js';
-
-function loadDotEnv(file = resolve(process.cwd(), '.env')) {
-  if (!existsSync(file)) return false;
-  for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
-    const match = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (!match || match[1] in process.env) continue;
-    let value = match[2];
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    process.env[match[1]] = value;
-  }
-  return true;
-}
 
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --prompt "task" [--max-evaluations 25] -- [Codex exec options]');

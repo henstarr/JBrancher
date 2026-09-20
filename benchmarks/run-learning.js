@@ -158,6 +158,38 @@ async function benchmarkGenericHarness(instance, store) {
   };
 }
 
+async function benchmarkJevLearning(instance, store) {
+  const task = `${instance.instance_id}: ${instance.problem_statement}`;
+  const action = { tool: 'read', args: { path: instance.fail_to_pass[0] } };
+  let evaluatorCalls = 0;
+  const brancher = createJBrancher({
+    getCandidates: async () => [action],
+    evaluate: async () => {
+      evaluatorCalls++;
+      return { scores: [0.98] };
+    },
+    actor: async () => ({ action }),
+    execute: async selected => `fixture contents for ${selected.args.path}`,
+    learningStore: store,
+    learningSource: 'jev-learning-benchmark',
+    learningOnlyFallback: false
+  });
+  const rows = [];
+  for (let attempt = 1; attempt <= repetitions; attempt++) {
+    const result = await brancher.step({ task, state: { repository: instance.repo } });
+    rows.push({ attempt, source: result.decision.source, correct: result.result === `fixture contents for ${action.args.path}` });
+  }
+  return {
+    instance_id: instance.instance_id,
+    baselineJevCalls: repetitions,
+    jevCalls: evaluatorCalls,
+    jevCallsAvoided: repetitions - evaluatorCalls,
+    jevCallReduction: Number(((repetitions - evaluatorCalls) / repetitions).toFixed(3)),
+    routeCoverage: rows.slice(2).every(row => row.source === 'learned' && row.correct),
+    rows
+  };
+}
+
 async function benchmarkVerifiedWorkflow(store) {
   let actorCalls = 0;
   const brancher = createJBrancher({
@@ -193,11 +225,13 @@ try {
   const store = createLocalLearningStore({ directory: join(directory, 'swebench') });
   const pathTemplateStore = createLocalLearningStore({ directory: join(directory, 'path-template') });
   const genericStore = createLocalLearningStore({ directory: join(directory, 'generic-harness') });
+  const jevLearningStore = createLocalLearningStore({ directory: join(directory, 'jev-learning') });
   const verifiedStore = createLocalLearningStore({ directory: join(directory, 'verified-harness') });
   const rows = [];
   const genericRows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
   for (const instance of fixture.instances) genericRows.push(await benchmarkGenericHarness(instance, genericStore));
+  const jevLearning = await benchmarkJevLearning(fixture.instances[0], jevLearningStore);
   const baselineFrontierCalls = fixture.instances.length * repetitions;
   const learnedFrontierCalls = rows.reduce((sum, row) => sum + row.frontierCalls, 0);
   const savedPromptTokens = rows.reduce((sum, row) => sum + row.savedPromptTokens, 0);
@@ -240,6 +274,7 @@ try {
         / genericRows.length,
       rows: genericRows
     },
+    jevLearning,
     verifiedHarness: verifiedWorkflow,
     pathTemplate,
     rows
@@ -250,6 +285,8 @@ try {
     if (report.learned.frontierCallReduction <= 0) failures.push('Pi frontier calls did not decrease');
     if (report.genericHarness.routeCoverage !== 1) failures.push('generic held-out route coverage is below 100%');
     if (report.genericHarness.actorCallReduction <= 0) failures.push('generic actor calls did not decrease');
+    if (report.jevLearning.routeCoverage !== true) failures.push('Jev learning route coverage is below 100%');
+    if (report.jevLearning.jevCallReduction <= 0) failures.push('Jev learning did not reduce evaluator calls');
     if (report.pathTemplate.unseenPathHandled !== true) failures.push('path template did not handle an unseen path');
     if (failures.length) throw new Error(`Learning benchmark assertions failed: ${failures.join('; ')}`);
   }

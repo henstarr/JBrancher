@@ -40,6 +40,11 @@
   local and CI runs instead of remaining informational output.
 - Serialize local learning-store mutations across concurrent harness sessions
   with a bounded crash-recoverable lock and unique atomic temp files.
+- Allow opt-in learning from successful Jev and rule decisions, so repeated
+  authorized workflows can bypass evaluator requests without recording learned
+  cache hits as new evidence.
+- Add a bounded live learning benchmark that reports real Jev usage and local
+  route coverage without persisting benchmark data or exposing credentials.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

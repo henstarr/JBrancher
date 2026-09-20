@@ -159,7 +159,8 @@ export function createJBrancher({
   }
 
   function shouldRecord(decision) {
-    return Boolean(learningStore && (!learningOnlyFallback || decision.source === 'actor'));
+    return Boolean(learningStore && decision.source !== 'learned'
+      && (!learningOnlyFallback || decision.source === 'actor'));
   }
 
   function recordAction(recorder, decision, stepNumber) {

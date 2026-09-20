@@ -42,6 +42,9 @@ four warm-up attempts:
   coverage) and saving 3,224 estimated prompt tokens.
 - Generic two-step harness replay: 336 actor calls down to 84 (75% fewer),
   with 100% held-out learned-step coverage.
+- Jev-selected route learning: eight simulated Jev decisions down to two (75%
+  fewer) after two successful warm-up executions, with 100% learned-route
+  coverage on the remaining repetitions.
 - Postcondition-verified write arm: the third repeated action uses the learned
   route after two actor warm-ups, avoiding 33.3% of actor calls in that
   three-attempt trial.
@@ -51,6 +54,19 @@ four warm-up attempts:
 These are routing-efficiency and synthetic context measurements, not official
 patch-resolution scores. Re-run them locally after changing the learner; run
 the official SWE-bench Docker harness separately for task success.
+
+To measure actual Jev overhead and savings on the same learning path, configure
+`TYPESAFE_API_KEY` in the ignored `.env` and run:
+
+```sh
+npm run bench:live-learning
+npm run bench:live-learning -- --instances 2 --repetitions 4
+```
+
+The command is deliberately bounded, uses a temporary local learning store,
+reports observed input/output tokens and evaluator calls, and removes its
+temporary data afterward. It is a live usage benchmark, not an official
+SWE-bench resolution result.
 
 The fixture compares three controls:
 
@@ -133,6 +149,12 @@ may use `learningPromotionMode: 'verified'` to learn side-effecting actions,
 but only when its postcondition verifier returns success and its current
 candidate set still authorizes the replay. Treat this as a harness policy
 decision, not as a Jev confidence decision.
+
+When the goal is to reduce Jev requests as well as actor requests, opt into
+recording successful Jev decisions with `learningOnlyFallback: false`. The
+local store still requires repeated evidence and the same candidate authorization
+before replay. Keep the default `true` when you want learning to observe only
+frontier/actor fallbacks.
 
 Learned multi-step replays are sent through the same postcondition on every
 run. If it rejects a replay, JBrancher quarantines the route so the next

@@ -28,6 +28,7 @@
     "bench:offline": "node benchmarks/run-routing.js",
     "bench:tokens": "node benchmarks/run-token-optimization.js",
     "bench:learning": "node benchmarks/run-learning.js",
+    "bench:live-learning": "node benchmarks/run-live-learning.js",
     "bench:swebench": "node benchmarks/run-official-swebench.js"
   },
   "exports": {
