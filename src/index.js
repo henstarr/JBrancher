@@ -50,7 +50,8 @@ export function createJBrancher({
   learningOnlyFallback = true,
   learningAutoPromote = true,
   learningMinimumObservations = 2,
-  learningMinimumSimilarity = 0.8
+  learningMinimumSimilarity = 0.8,
+  learningOutcome
 } = {}) {
   if (!Array.isArray(rules) || rules.some(rule => typeof rule !== 'function')) throw new TypeError('rules must be functions');
   if (getCandidates !== undefined && typeof getCandidates !== 'function') throw new TypeError('getCandidates must be a function');
@@ -75,6 +76,9 @@ export function createJBrancher({
   }
   if (!Number.isFinite(learningMinimumSimilarity) || learningMinimumSimilarity < 0 || learningMinimumSimilarity > 1) {
     throw new TypeError('Invalid learningMinimumSimilarity');
+  }
+  if (learningOutcome !== undefined && typeof learningOutcome !== 'function') {
+    throw new TypeError('learningOutcome must be a function');
   }
 
   async function decide(input = {}) {
@@ -169,6 +173,25 @@ export function createJBrancher({
     }
   }
 
+  async function validatedOutcome(context) {
+    if (!learningOutcome) return undefined;
+    try {
+      const result = await learningOutcome({
+        task: clone(context.task ?? ''),
+        state: clone(context.state ?? {}),
+        history: clone(context.history ?? []),
+        events: clone(context.events ?? []),
+        event: context.event ? clone(context.event) : undefined
+      });
+      if (result === true) return 'success';
+      if (result === false) return 'unknown';
+      if (result === 'success' || result === 'unknown' || result === 'failure') return result;
+    } catch {
+      // Completion validation is advisory to the host harness.
+    }
+    return undefined;
+  }
+
   async function executeStep(input = {}, recorder) {
     const decision = await decide(input);
     const actionRecorder = shouldRecord(decision) ? recorder : null;
@@ -198,7 +221,8 @@ export function createJBrancher({
       : null;
     try {
       const event = await executeStep(input, recorder);
-      await finishRecorder(recorder, { metadata: { mode: 'step', decisionSource: event.decision.source } });
+      const outcome = await validatedOutcome({ task: input.task, state: input.state, history: input.history, event, events: [event] });
+      await finishRecorder(recorder, { ...(outcome ? { outcome } : {}), metadata: { mode: 'step', decisionSource: event.decision.source } });
       return event;
     } catch (error) {
       await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
@@ -270,7 +294,8 @@ export function createJBrancher({
         if (typeof input.observe !== 'function') break;
         state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
       }
-      await finishRecorder(recorder, { metadata: { mode: 'run', steps: events.length } });
+      const outcome = await validatedOutcome({ task: input.task, state, history, events });
+      await finishRecorder(recorder, { ...(outcome ? { outcome } : {}), metadata: { mode: 'run', steps: events.length } });
     } catch (error) {
       await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'run', steps: events.length } }).catch(() => {});
       throw error;
@@ -280,7 +305,8 @@ export function createJBrancher({
 
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
-    learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback
+    learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
+    learningOutcomeValidation: Boolean(learningOutcome)
   } };
 }
 

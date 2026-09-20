@@ -134,6 +134,34 @@ test('generic brancher records unknown actor fallback episodes in a local store'
   }
 });
 
+test('generic brancher lets the harness veto promotion when a postcondition is not met', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-outcome-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let actorCalls = 0;
+    const brancher = createJBrancher({
+      getCandidates: async () => [{ tool: 'read', args: { path: 'README.md' } }],
+      actor: async () => {
+        actorCalls++;
+        return { action: { tool: 'read', args: { path: 'README.md' } } };
+      },
+      execute: async () => 'read successfully',
+      learningStore: store,
+      learningOutcome: () => false
+    });
+    await brancher.step({ task: 'Read README.md' });
+    await brancher.step({ task: 'Read README.md' });
+    assert.equal(actorCalls, 2);
+    assert.equal((await store.readTraces()).every(trace => trace.outcome === 'unknown'), true);
+    assert.equal((await store.readRoutes()).some(route => route.status === 'active'), false);
+    const fallback = await brancher.step({ task: 'Read README.md' });
+    assert.equal(fallback.decision.source, 'actor');
+    assert.equal(actorCalls, 3);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic brancher replays a learned multi-step read workflow only when each step remains allowed', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-workflow-'));
   try {

@@ -81,7 +81,8 @@ const brancher = createJBrancher({
   actor: context => existingActor.nextAction(context),
   execute: (action, context) => harness.execute(action, context),
   learningStore: store,
-  learningSource: 'benchmark-harness'
+  learningSource: 'benchmark-harness',
+  learningOutcome: ({ state, events }) => harness.isComplete(state, events)
 });
 ```
 
@@ -91,7 +92,9 @@ later run can use a learned action only when it is still present in the
 harness-provided candidate set. Keep learning enabled for both paired arms
 only when you are measuring dataset growth; for a clean cost comparison,
 freeze or copy the learned `.jbrancher/routes.json` between trials so the
-controls do not receive different experience.
+controls do not receive different experience. Prefer supplying
+`learningOutcome` from the same verifier/postcondition used by the harness so
+tool success is not confused with task success.
 
 ## Terminal-Bench / Harbor
 

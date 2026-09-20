@@ -21,6 +21,8 @@
   harness still exposes the learned action as an allowed candidate.
 - Add multi-step generic workflow replay, learned-route quarantine after
   execution failure, and an official SWE-bench evaluator command wrapper.
+- Add an optional harness-owned learning outcome/postcondition hook so tool
+  completion alone does not have to qualify a trace for promotion.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

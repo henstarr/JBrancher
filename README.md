@@ -235,7 +235,8 @@ const brancher = createJBrancher({
   execute: (action, context) => harness.execute(action, context),
   learningStore: store,
   learningSource: 'my-harness',
-  learningCwd: process.cwd()
+  learningCwd: process.cwd(),
+  learningOutcome: ({ state, events }) => harness.isComplete(state, events)
 });
 ```
 
@@ -245,7 +246,9 @@ it matches the current task and is present in the candidate set returned by
 redacted, and advisory; set `learningAutoPromote: false` if candidates should
 always require manual promotion. Multi-step replay applies the same check at
 every step and abandons the learned workflow before execution if any step is
-no longer legal.
+no longer legal. `learningOutcome` is optional; when supplied, it is the
+harness-owned postcondition that decides whether an episode is eligible for
+promotion.
 
 ### Reduce context tokens before a model call
 
