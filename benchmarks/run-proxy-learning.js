@@ -30,12 +30,16 @@ async function requestJson(baseUrl, pathname, body) {
   return json;
 }
 
-const instanceCount = integerFlag('--instances', 8, 1);
+const instanceCount = integerFlag('--instances', fixture.instances.length, 1);
 const repetitions = integerFlag('--repetitions', 4, 3);
 const actorInputTokens = integerFlag('--actor-input-tokens', 1800, 0);
 const actorOutputTokens = integerFlag('--actor-output-tokens', 140, 0);
 const shouldAssert = process.argv.includes('--assert');
 const instances = fixture.instances.slice(0, Math.min(instanceCount, fixture.instances.length));
+const sourceSplits = instances.reduce((counts, instance) => {
+  counts[instance.split] = (counts[instance.split] ?? 0) + 1;
+  return counts;
+}, {});
 const directory = await mkdtemp(join(tmpdir(), 'jbrancher-proxy-learning-'));
 let evaluatorCalls = 0;
 const service = createJBrancherServer({
@@ -139,7 +143,7 @@ try {
   const actualTokens = actualFrontierCalls * (actorInputTokens + actorOutputTokens);
   const report = {
     benchmark: 'JBrancher language-agnostic proxy open-world learning',
-    source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
+    source: { url: fixture.sourceUrl, instances: instances.length, repetitions, splits: sourceSplits },
     caveat: 'SWE-bench-derived prompts and deterministic read actions through the HTTP proxy; not an official SWE-bench patch-resolution result.',
     baselineFrontierCalls,
     actualFrontierCalls,
@@ -168,6 +172,7 @@ try {
     assert.equal(report.datasetExamples, instances.length * repetitions);
     assert.equal(report.evaluatorCalls, 0);
     assert.equal(report.openWorldAbstentions, instances.length * 2);
+    assert.equal(Object.values(sourceSplits).reduce((total, count) => total + count, 0), instances.length);
     assert.equal(report.routeCoverage, true);
     assert.equal(report.successRate, 1);
     assert.equal(report.learnedReplays, instances.length * (repetitions - 2));

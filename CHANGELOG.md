@@ -36,6 +36,10 @@
   integration test.
 - Require Python 3.12 in CI so the cross-language integration test cannot pass
   only because Python was unavailable and the test was skipped.
+- Record SWE-bench Lite split provenance in the benchmark fixture and correct
+  its current Astropy `FAIL_TO_PASS` identifier.
+- Make the local proxy benchmark cover all 14 checked-in SWE-bench Lite
+  instances by default; smaller runs remain available with `--instances`.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

@@ -45,4 +45,4 @@ Reproduce with:
 npm run bench:live-learning -- --instances 3 --repetitions 4
 ```
 
-Source prompts: [SWE-bench Lite](https://huggingface.co/datasets/SWE-bench/SWE-bench_Lite).
+Source instances: [SWE-bench Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite), using the checked-in compact summaries and current `FAIL_TO_PASS` values.

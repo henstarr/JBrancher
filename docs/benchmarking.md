@@ -52,9 +52,12 @@ npm run bench:offline -- --write results/routing.json
 
 ## Current local snapshot
 
-The reproducible local learning benchmark currently uses 14 real SWE-bench Lite
-problem statements across seven repositories, eight repetitions per task, and
-four warm-up attempts:
+The reproducible local learning benchmark currently uses 14 SWE-bench Lite
+instance IDs across seven repositories (11 from the current `dev` split and 3
+from `test`), eight repetitions per task, and four warm-up attempts. The
+checked-in problem statements are compact summaries; the `FAIL_TO_PASS` values
+and split provenance are recorded in the fixture:
+`benchmarks/fixtures/swebench-lite-mini.json`.
 
 - Pi-style read-only replay: 112 simulated frontier calls down to 56 (50%
   fewer), handling all 56 held-out post-warm-up attempts (100% held-out route

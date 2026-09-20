@@ -26,4 +26,4 @@ Reproduce with:
 npm run bench:live-pi-learning -- --instances 1 --repetitions 4
 ```
 
-Source prompt: [SWE-bench Lite](https://huggingface.co/datasets/SWE-bench/SWE-bench_Lite).
+Source instance: [SWE-bench Lite](https://huggingface.co/datasets/princeton-nlp/SWE-bench_Lite), using the checked-in compact summary and current `FAIL_TO_PASS` value.
