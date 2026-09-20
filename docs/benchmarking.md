@@ -89,11 +89,29 @@ reports observed input/output tokens and evaluator calls, and removes its
 temporary data afterward. It is a live usage benchmark, not an official
 SWE-bench resolution result.
 
+For a paired actor-cost comparison, provide the actor's measured average token
+usage and current rates explicitly. The command then reports baseline versus
+actual provider tokens and cost-per-run; without these flags it reports only
+real Jev usage and leaves actor cost unknown:
+
+```sh
+npm run bench:live-learning -- --instances 2 --repetitions 4 \
+  --actor-input-tokens 1800 --actor-output-tokens 140 \
+  --actor-input-rate 3 --actor-output-rate 15 \
+  --jev-input-rate 0.5 --jev-output-rate 2
+```
+
 The latest checked-in live sample is summarized in
 [docs/live-learning-2026-09-20.md](live-learning-2026-09-20.md). It reduced
 12 Jev calls to 6 across three prompts while retaining 100% learned-route
 coverage. Install the official evaluator wrapper separately when preparing a
 Docker-backed run:
+
+The latest paired sample, which combines observed Jev usage with explicitly
+supplied actor assumptions, is summarized in
+[docs/live-paired-2026-09-20.md](live-paired-2026-09-20.md). It reduced both
+Jev and actor calls on a three-repetition fixture while preserving the fixture
+verifier result; the actor tokens remain assumptions, not provider telemetry.
 
 ```sh
 python -m pip install -r benchmarks/requirements.txt
