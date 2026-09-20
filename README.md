@@ -88,6 +88,50 @@ stdout and session logs can contain them**. Do not publish raw event streams bli
 
 See [Codex wrapper validation and limitations](docs/codex-wrapper.md).
 
+### Drop into Pi
+
+JBrancher is also a native Pi package. Install it from this repository:
+
+```sh
+pi install git:github.com/henstarr/JBrancher
+```
+
+Or try it for one session without changing Pi settings:
+
+```sh
+pi -e git:github.com/henstarr/JBrancher
+```
+
+The extension handles a small set of safe, read-only prompts directly (`git
+status`, current branch, current directory, and Node version). Every other
+prompt continues to Pi's configured frontier model. Add project-specific
+deterministic routes in `jbrancher.config.js`:
+
+```js
+export default {
+  routes: [
+    {
+      id: 'tests',
+      match: ({ task }) => /^did the tests pass\??$/i.test(task.trim()),
+      run: async ({ exec }) => {
+        const result = await exec('npm', ['test']);
+        return result.code === 0 ? 'Tests passed.' : (result.stderr || 'Tests failed.');
+      }
+    }
+  ]
+};
+```
+
+One matching route runs directly. If several routes match, JBrancher asks
+Jev to choose only among those routes when `TYPESAFE_API_KEY` is available;
+uncertain or failed evaluation falls back to Pi. Use `/jbrancher` for status
+and `/jbrancher reload` after changing the config. Set
+`JBRANCHER_PI_MODE=shadow` to measure matches without handling prompts, or
+`JBRANCHER_PI_MODE=active` for deterministic-first behavior.
+
+See [Pi integration](docs/pi.md) for configuration, limits, and the exact
+fallback contract.
+
 ### Wrap your own harness
 
 Install JBrancher directly from GitHub:

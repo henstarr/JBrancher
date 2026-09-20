@@ -9,6 +9,9 @@
 - Added GitHub README buttons and safe `.env.example` onboarding.
 # Unreleased
 
+- Add a native Pi package/extension with deterministic-first input routing,
+  project-local routes, optional Jev disambiguation, safe read-only built-ins,
+  shadow mode, and frontier fallback on uncertainty or failure.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

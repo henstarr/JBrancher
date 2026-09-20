@@ -4,6 +4,13 @@
   "description": "Rules-first decision routing for AI agent harnesses, with optional Jev evaluation and actor fallback.",
   "type": "module",
   "license": "MIT",
+  "keywords": [
+    "pi-package",
+    "jbrancher",
+    "jev",
+    "ai-agents",
+    "agent-harness"
+  ],
   "repository": "github:henstarr/JBrancher",
   "bugs": "https://github.com/henstarr/JBrancher/issues",
   "homepage": "https://github.com/henstarr/JBrancher#readme",
@@ -25,12 +32,20 @@
     ".": "./src/index.js",
     "./context": "./src/context.js",
     "./jev": "./src/jev.js",
+    "./pi": "./src/pi.js",
     "./server": "./src/server.js"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/jbrancher.js"
+    ]
   },
   "files": [
     "src",
     "bin",
+    "extensions",
     "examples",
+    "docs",
     "README.md",
     ".env.example",
     "LICENSE"
