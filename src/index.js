@@ -48,6 +48,7 @@ export function createJBrancher({
   learningSource = 'harness',
   learningCwd = '',
   learningOnlyFallback = true,
+  learningRecordEmptyEpisodes = true,
   learningAutoPromote = true,
   learningMinimumObservations = 2,
   learningCandidateMinimumObservations = 1,
@@ -73,6 +74,7 @@ export function createJBrancher({
     throw new TypeError('learningSource and learningCwd must be strings');
   }
   if (typeof learningOnlyFallback !== 'boolean') throw new TypeError('learningOnlyFallback must be boolean');
+  if (typeof learningRecordEmptyEpisodes !== 'boolean') throw new TypeError('learningRecordEmptyEpisodes must be boolean');
   if (typeof learningAutoPromote !== 'boolean') throw new TypeError('learningAutoPromote must be boolean');
   if (!Number.isSafeInteger(learningMinimumObservations) || learningMinimumObservations < 1) {
     throw new TypeError('learningMinimumObservations must be a positive integer');
@@ -171,10 +173,11 @@ export function createJBrancher({
     return toolCallId;
   }
 
-  async function finishRecorder(recorder, options) {
-    if (!recorder || recorder.toolCalls.length === 0) return undefined;
+  async function finishRecorder(recorder, options = {}) {
+    const { recordEpisode = true, ...finishOptions } = options;
+    if (!recorder || !recordEpisode || (!learningRecordEmptyEpisodes && recorder.toolCalls.length === 0)) return undefined;
     try {
-      const saved = await recorder.finish(options);
+      const saved = await recorder.finish(finishOptions);
       if (saved?.outcome === 'success' && learningAutoPromote
         && typeof learningStore?.refreshCandidates === 'function'
         && typeof learningStore?.promote === 'function') {
@@ -244,8 +247,10 @@ export function createJBrancher({
         metadata: { ...learningMetadata, initialState: clone(input.state ?? {}) }
       })
       : null;
+    let recordEpisode = false;
     try {
       const event = await executeStep(input, recorder);
+      recordEpisode = shouldRecord(event.decision);
       const outcome = await validatedOutcome({ task: input.task, state: input.state, history: input.history, event, events: [event] });
       if (event.decision.source === 'learned' && outcome && outcome !== 'success') {
         if (typeof learningStore?.recordRouteFailure === 'function') {
@@ -256,6 +261,7 @@ export function createJBrancher({
         return { ...event, learningOutcome: outcome, learnedRouteQuarantined: true };
       }
       await finishRecorder(recorder, {
+        recordEpisode,
         ...(outcome ? { outcome } : {}),
         metadata: {
           mode: 'step',
@@ -265,7 +271,7 @@ export function createJBrancher({
       });
       return event;
     } catch (error) {
-      await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
+      await finishRecorder(recorder, { recordEpisode, outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
       throw error;
     }
   }
@@ -331,6 +337,7 @@ export function createJBrancher({
         metadata: { ...learningMetadata, initialState: clone(input.state ?? {}) }
       })
       : null;
+    let recordEpisode = false;
     try {
       const learnedRun = await replayLearnedWorkflow(input, state, history);
       if (learnedRun) {
@@ -352,6 +359,7 @@ export function createJBrancher({
       }
       for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
         const event = await executeStep({ ...input, state, history, step: stepNumber }, recorder);
+        recordEpisode ||= shouldRecord(event.decision);
         events.push(event);
         history = [...history, event];
         if (event.decision.action === null || !execute) break;
@@ -360,6 +368,7 @@ export function createJBrancher({
       }
       const outcome = await validatedOutcome({ task: input.task, state, history, events });
       await finishRecorder(recorder, {
+        recordEpisode,
         ...(outcome ? { outcome } : {}),
         metadata: {
           mode: 'run',
@@ -368,7 +377,11 @@ export function createJBrancher({
         }
       });
     } catch (error) {
-      await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'run', steps: events.length } }).catch(() => {});
+      await finishRecorder(recorder, {
+        recordEpisode,
+        outcome: 'unknown',
+        metadata: { mode: 'run', steps: events.length }
+      }).catch(() => {});
       throw error;
     }
     return { events, state, history };
@@ -377,6 +390,7 @@ export function createJBrancher({
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
     learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
+    learningRecordEmptyEpisodes,
     learningMinimumObservations, learningCandidateMinimumObservations, learningPromotionMode,
     learningOutcomeValidation: Boolean(learningOutcome)
   } };

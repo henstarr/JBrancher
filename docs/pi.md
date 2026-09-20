@@ -233,6 +233,11 @@ const brancher = createJBrancher({
 });
 ```
 
+Generic fallback episodes with no tool call are retained as `unknown` dataset
+rows by default. They are useful for measuring demand and later labeling, but
+cannot become executable routes until the harness supplies an action. Set
+`learningRecordEmptyEpisodes: false` to omit those rows.
+
 Learned actions never bypass `getCandidates`; the harness remains the source
 of truth for what is legal in the current state.
 

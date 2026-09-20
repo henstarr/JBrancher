@@ -53,7 +53,14 @@ async function benchmarkInstance(instance, store) {
       handled++;
       savedPromptTokens += estimateTokens(taskForAttempt);
     }
-    rows.push({ attempt, taskVariant: taskForAttempt === tasks.task ? 'base' : 'paraphrase', source: result.source, correct });
+    rows.push({
+      attempt,
+      taskVariant: taskForAttempt === tasks.task ? 'base' : 'paraphrase',
+      holdout: attempt > warmupAttempts,
+      source: result.source,
+      handled: Boolean(result.routeId),
+      correct
+    });
 
     if (attempt === warmupAttempts) {
       await store.refreshCandidates({ minimumObservations: 2 });
@@ -63,7 +70,15 @@ async function benchmarkInstance(instance, store) {
     }
   }
 
-  return { instance_id: instance.instance_id, frontierCalls, handled, savedPromptTokens, rows };
+  const holdoutRows = rows.filter(row => row.holdout);
+  return {
+    instance_id: instance.instance_id,
+    frontierCalls,
+    handled,
+    savedPromptTokens,
+    holdoutRouteCoverage: holdoutRows.length > 0 && holdoutRows.every(row => row.handled),
+    rows
+  };
 }
 
 async function benchmarkPathTemplate(store) {
@@ -123,17 +138,22 @@ async function benchmarkGenericHarness(instance, store) {
     });
     rows.push({
       attempt,
+      holdout: attempt > warmupAttempts,
       sources: result.events.map(event => event.decision.source),
+      learnedSteps: result.events.filter(event => event.decision.source === 'learned').length,
       correct: result.events.length >= expectedPaths.length
         && result.events.slice(0, expectedPaths.length).every((event, index) =>
           event.result === `fixture contents for ${expectedPaths[index]}`)
     });
   }
+  const holdoutRows = rows.filter(row => row.holdout);
   return {
     instance_id: instance.instance_id,
     baselineActorCalls: repetitions * (expectedPaths.length + 1),
     actorCalls,
     learnedCalls: repetitions * (expectedPaths.length + 1) - actorCalls,
+    holdoutLearnedStepCoverage: holdoutRows.length > 0
+      && holdoutRows.every(row => row.learnedSteps >= expectedPaths.length),
     rows
   };
 }
@@ -202,7 +222,9 @@ try {
     learned: {
       frontierCalls: learnedFrontierCalls,
       routesPromoted: (await store.readRoutes()).filter(route => route.status === 'active').length,
-      routeCoverage: outcomes.every(row => row.correct) ? 1 : 0,
+      routeCoverage: rows.every(row => row.holdoutRouteCoverage) ? 1 : 0,
+      holdoutAttempts: outcomes.filter(row => row.holdout).length,
+      holdoutHandled: outcomes.filter(row => row.holdout && row.handled).length,
       frontierCallsAvoided: baselineFrontierCalls - learnedFrontierCalls,
       frontierCallReduction: Number(((baselineFrontierCalls - learnedFrontierCalls) / baselineFrontierCalls).toFixed(3)),
       estimatedPromptTokensSaved: savedPromptTokens
@@ -213,7 +235,9 @@ try {
       actorCallsAvoided: genericBaselineActorCalls - genericLearnedActorCalls,
       actorCallReduction: Number(((genericBaselineActorCalls - genericLearnedActorCalls)
         / genericBaselineActorCalls).toFixed(3)),
-      routeCoverage: genericRows.flatMap(row => row.rows).every(row => row.correct) ? 1 : 0,
+      routeCoverage: genericRows.every(row => row.holdoutLearnedStepCoverage) ? 1 : 0,
+      holdoutLearnedStepCoverage: genericRows.filter(row => row.holdoutLearnedStepCoverage).length
+        / genericRows.length,
       rows: genericRows
     },
     verifiedHarness: verifiedWorkflow,

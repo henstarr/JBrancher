@@ -26,9 +26,10 @@ The reproducible local learning benchmark currently uses three real SWE-bench
 Lite problem statements, eight repetitions per task, and four warm-up attempts:
 
 - Pi-style read-only replay: 24 simulated frontier calls down to 12 (50%
-  fewer), with 100% route coverage and 944 estimated prompt tokens saved.
+  fewer), handling all 12 held-out post-warm-up attempts (100% held-out route
+  coverage) and saving 944 estimated prompt tokens.
 - Generic two-step harness replay: 72 actor calls down to 18 (75% fewer),
-  with 100% route coverage.
+  with 100% held-out learned-step coverage.
 - Postcondition-verified write arm: the third repeated action uses the learned
   route after two actor warm-ups, avoiding 33.3% of actor calls in that
   three-attempt trial.

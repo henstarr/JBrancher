@@ -158,6 +158,33 @@ test('generic runtime exposes a first fallback as a candidate without activating
   }
 });
 
+test('generic runtime records an unregistered no-tool fallback as dataset evidence', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-empty-learning-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const brancher = createJBrancher({
+      getCandidates: async () => [],
+      actor: async () => ({ action: null }),
+      learningStore: store,
+      learningSource: 'answer-harness',
+      learningCwd: directory
+    });
+
+    const result = await brancher.step({ task: 'Explain the current routing policy' });
+    assert.equal(result.decision.source, 'actor');
+    const [trace] = await store.readTraces();
+    assert.equal(trace.task, 'Explain the current routing policy');
+    assert.deepEqual(trace.toolCalls, []);
+    assert.equal(trace.outcome, 'unknown');
+    const [example] = (await store.writeDataset()).examples;
+    assert.equal(example.steps.length, 0);
+    assert.equal(example.reusable, false);
+    assert.equal((await store.readRoutes()).length, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic brancher lets the harness veto promotion when a postcondition is not met', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-outcome-'));
   try {

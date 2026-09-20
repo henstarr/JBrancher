@@ -261,6 +261,12 @@ no longer legal. `learningOutcome` is optional; when supplied, it is the
 harness-owned postcondition that decides whether an episode is eligible for
 promotion.
 
+By default, an actor fallback is recorded even when it selects no tool (for
+example, a direct answer or an intentional no-op). That still becomes a
+redacted dataset example, but it is not a replayable route until the harness
+provides an executable action and successful evidence. Set
+`learningRecordEmptyEpisodes: false` if a harness wants to omit those rows.
+
 The default promotion mode is `safe`: only read-only routes can become active.
 If your harness has a strong verifier and wants to learn writes or other
 side-effecting actions, opt in explicitly with
