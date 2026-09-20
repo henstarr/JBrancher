@@ -29,6 +29,7 @@
     "bench:cost": "node benchmarks/run-cost.js",
     "bench:tokens": "node benchmarks/run-token-optimization.js",
     "bench:learning": "node benchmarks/run-learning.js",
+    "bench:discovery": "node benchmarks/run-discovery.js",
     "bench:live-learning": "node benchmarks/run-live-learning.js",
     "bench:live-codex": "node benchmarks/run-live-codex-learning.js",
     "bench:live-pi-learning": "node benchmarks/run-live-pi-learning.js",
@@ -39,6 +40,7 @@
     "./context": "./src/context.js",
     "./jev": "./src/jev.js",
     "./learning": "./src/learning.js",
+    "./discovery": "./src/discovery.js",
     "./pi": "./src/pi.js",
     "./server": "./src/server.js"
   },

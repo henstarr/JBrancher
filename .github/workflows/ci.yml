@@ -27,3 +27,4 @@ jobs:
       - run: npm run bench:cost -- --assert
       - run: npm run bench:tokens -- --assert
       - run: npm run bench:learning -- --assert
+      - run: npm run bench:discovery -- --assert

@@ -207,6 +207,16 @@ npm run bench:learning
 The benchmark uses real SWE-bench problem statements to measure routing reuse;
 it is not an official SWE-bench patch-resolution result.
 
+For a harness-neutral adapter that can collect any unknown route, use
+`jbrancher/discovery`. It accepts episode lifecycle events from the existing
+frontier actor and handles local redaction, dataset append, candidate mining,
+and safe promotion. See [open-world route discovery](docs/open-world-learning.md).
+The cold-to-warm loop can be checked without a provider key:
+
+```sh
+npm run bench:discovery -- --assert
+```
+
 For a generic harness or offline inspection, export the same local dataset
 without changing route status:
 
