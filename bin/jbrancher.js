@@ -119,12 +119,18 @@ async function dataset() {
     counts[outcome] = (counts[outcome] || 0) + 1;
     return counts;
   }, {});
+  const resolutions = traces.reduce((counts, trace) => {
+    const resolution = trace.routeResolution || trace.metadata?.routeResolution || 'unknown';
+    counts[resolution] = (counts[resolution] || 0) + 1;
+    return counts;
+  }, {});
   console.log(JSON.stringify({
     directory,
     traces: traces.length,
     datasetExamples: exported.examples.length,
     reusableExamples: exported.examples.filter(example => example.reusable).length,
     outcomes,
+    resolutions,
     datasetPath: exported.path,
     routesPath: store.routesPath
   }, null, 2));

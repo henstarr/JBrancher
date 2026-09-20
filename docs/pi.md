@@ -169,9 +169,11 @@ The local loop is deliberately conservative:
 3. `/jbrancher dataset` regenerates `.jbrancher/dataset.jsonl`; examples are
    redacted, labeled with outcome and safety, and assigned stable train,
    validation, or test splits using a fingerprint of the normalized task and
-   action shape. Dataset rows also retain redacted harness context
+   action shape. Dataset rows also retain a `routeResolution` label describing
+   whether the work was unmatched, uncertain, ambiguous, a learned-route failure, or
+   another explicit fallback class. They retain redacted harness context
    metadata, such as the initial state supplied by a generic runtime, so future
-offline mining can distinguish the same task under different states.
+   offline mining can distinguish the same task under different states.
 4. `/jbrancher candidates` mines successful workflows. The first successful
    unknown episode becomes a reviewable candidate immediately; repeated
    evidence is still required before automatic promotion.

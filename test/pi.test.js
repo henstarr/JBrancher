@@ -224,10 +224,56 @@ test('Pi learning mode mines an unknown successful route immediately as a candid
     const dataset = await readFile(join(directory, '.jbrancher', 'dataset.jsonl'), 'utf8');
     assert.equal(routes.length, 1);
     assert.equal(routes[0].status, 'candidate');
-    assert.equal(dataset.trim().split(/\r?\n/).length, 1);
+    const examples = dataset.trim().split(/\r?\n/).map(line => JSON.parse(line));
+    assert.equal(examples.length, 1);
+    assert.equal(examples[0].routeResolution, 'unmatched');
   } finally {
     if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
     else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Pi learning mode labels ambiguous registered routes separately from unmatched work', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-ambiguous-test-'));
+  await writeFile(join(directory, 'jbrancher.config.js'), `export default {
+    routes: [
+      { id: 'first', match: () => true, run: async () => 'first' },
+      { id: 'second', match: () => true, run: async () => 'second' }
+    ]
+  };\n`, 'utf8');
+  const handlers = new Map();
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage() {},
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  const previousKey = process.env.TYPESAFE_API_KEY;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  process.env.TYPESAFE_API_KEY = '';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    assert.deepEqual(await handlers.get('input')({ text: 'choose the ambiguous action', source: 'interactive' }, ctx), { action: 'continue' });
+    await handlers.get('tool_call')({ toolCallId: 'one', toolName: 'read', input: { path: 'README.md' } });
+    await handlers.get('tool_result')({ toolCallId: 'one', isError: false, content: [{ type: 'text', text: 'ok' }] });
+    await handlers.get('agent_end')({}, ctx);
+    const dataset = JSON.parse((await readFile(join(directory, '.jbrancher', 'dataset.jsonl'), 'utf8')).trim());
+    assert.equal(dataset.routeResolution, 'ambiguous');
+    assert.deepEqual(dataset.context.matchedRouteIds, ['first', 'second']);
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    if (previousKey === undefined) delete process.env.TYPESAFE_API_KEY;
+    else process.env.TYPESAFE_API_KEY = previousKey;
     await rm(directory, { recursive: true, force: true });
   }
 });

@@ -112,6 +112,7 @@ test('generic brancher records unknown actor fallback episodes in a local store'
     assert.equal(traces[0].toolCalls[0].toolName, 'read');
     assert.equal(traces[0].toolCalls[0].output, 'contents of README.md');
     assert.equal(traces[0].metadata.initialState.phase, 0);
+    assert.equal(traces[0].routeResolution, 'uncertain');
     const routes = await store.readRoutes();
     assert.equal(routes.length, 1);
     assert.equal(routes[0].status, 'active');
@@ -208,6 +209,7 @@ test('generic runtime records an unregistered no-tool fallback as dataset eviden
     assert.equal(trace.task, 'Explain the current routing policy');
     assert.deepEqual(trace.toolCalls, []);
     assert.equal(trace.outcome, 'unknown');
+    assert.equal(trace.routeResolution, 'unmatched');
     const [example] = (await store.writeDataset()).examples;
     assert.equal(example.steps.length, 0);
     assert.equal(example.reusable, false);

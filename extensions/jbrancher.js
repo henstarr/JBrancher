@@ -187,6 +187,14 @@ export default async function jbrancherPiExtension(pi) {
       return { action: 'continue' };
     }
     if (!outcome.routeId) {
+      const routeResolution = outcome.failedRouteId
+        ? 'failed'
+        : outcome.matched?.length ? 'ambiguous' : 'unmatched';
+      runtime.learning.pending?.setMetadata?.({
+        routeResolution,
+        ...(Array.isArray(outcome.matched) ? { matchedRouteIds: outcome.matched } : {}),
+        ...(outcome.reason ? { fallbackReason: outcome.reason } : {})
+      });
       if (outcome.failedRouteId && runtime.learning.enabled
         && typeof runtime.learning.store.recordRouteFailure === 'function') {
         try {
@@ -202,7 +210,10 @@ export default async function jbrancherPiExtension(pi) {
             task: event.text,
             cwd: ctx.cwd,
             source: event.source || 'interactive',
-            metadata: { fallbackAfterRouteFailure: outcome.failedRouteId }
+            metadata: {
+              routeResolution: 'failed',
+              fallbackAfterRouteFailure: outcome.failedRouteId
+            }
           });
         } catch (error) {
           notify(ctx, `JBrancher route quarantine failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');

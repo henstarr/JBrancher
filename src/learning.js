@@ -17,6 +17,7 @@ const TASK_CONTEXT_PREFIX = /^(?:please\s+)?(?:open|read|inspect|look\s+at|check
 const READ_INTENT = /\b(read|open|show|view|inspect|display|look|list|cat|contents?|inside)\b/i;
 const WRITE_INTENT = /\b(delete|remove|write|edit|modify|change|update|create|run|execute|deploy|install)\b/i;
 const SENSITIVE_READ_PATH = /(^|[\\/])(?:\.env(?:\.[^\\/]+)*|credentials?(?:\.[^\\/]+)*|secrets?(?:\.[^\\/]+)*|passwords?(?:\.[^\\/]+)*|tokens?(?:\.[^\\/]+)*|[^\\/]*\.(?:pem|key|p12|pfx))$/i;
+const ROUTE_RESOLUTIONS = new Set(['registered', 'learned', 'unmatched', 'uncertain', 'ambiguous', 'failed', 'shadow', 'unknown']);
 
 export function redactText(value, maxChars = 2000) {
   if (typeof value !== 'string') return value;
@@ -130,6 +131,7 @@ function normalizeTrace(trace) {
   if (!trace || typeof trace !== 'object' || typeof trace.task !== 'string') {
     throw new TypeError('Trace requires a task');
   }
+  const routeResolution = trace.routeResolution || trace.metadata?.routeResolution;
   return {
     schemaVersion: 1,
     id: trace.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -141,6 +143,7 @@ function normalizeTrace(trace) {
     toolCalls: redactValue(trace.toolCalls || []),
     outcome: trace.outcome || 'unknown',
     safety: classifyTraceSafety(trace.toolCalls || []),
+    routeResolution: ROUTE_RESOLUTIONS.has(routeResolution) ? routeResolution : 'unknown',
     metadata: redactValue(trace.metadata || {})
   };
 }
@@ -407,6 +410,9 @@ export function traceToDatasetExample(trace) {
   const task = redactText(trace.task, 4000);
   const toolCalls = redactValue(trace.toolCalls || []);
   const safety = trace.safety || classifyTraceSafety(toolCalls);
+  const routeResolution = ROUTE_RESOLUTIONS.has(trace.routeResolution)
+    ? trace.routeResolution
+    : ROUTE_RESOLUTIONS.has(trace.metadata?.routeResolution) ? trace.metadata.routeResolution : 'unknown';
   const id = trace.id || hash(`${task}\n${JSON.stringify(toolCalls)}`);
   const fingerprint = datasetFingerprint(task, toolCalls);
   return {
@@ -420,6 +426,7 @@ export function traceToDatasetExample(trace) {
     context: redactValue(trace.metadata || {}),
     outcome: trace.outcome || 'unknown',
     safety,
+    routeResolution,
     reusable: trace.outcome === 'success' && safety === 'read-only',
     source: trace.source || 'pi',
     createdAt: trace.createdAt || null
@@ -460,6 +467,7 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
     startedAt: new Date().toISOString(),
     toolCalls: []
   };
+  let episodeMetadata = metadata && typeof metadata === 'object' && !Array.isArray(metadata) ? { ...metadata } : {};
   let finished = false;
   let saved;
 
@@ -480,6 +488,13 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
     call.output = outputPreview(event.output ?? event.content);
   }
 
+  function setMetadata(values = {}) {
+    if (!values || typeof values !== 'object' || Array.isArray(values)) {
+      throw new TypeError('Episode metadata must be an object');
+    }
+    episodeMetadata = { ...episodeMetadata, ...values };
+  }
+
   async function finish({ outcome, metadata: finishMetadata = {} } = {}) {
     if (finished) return saved;
     const resolvedOutcome = outcome || (episode.toolCalls.length > 0
@@ -487,7 +502,7 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
     saved = await store.appendTrace({
       ...episode,
       outcome: resolvedOutcome,
-      metadata: { ...metadata, ...finishMetadata }
+      metadata: { ...episodeMetadata, ...finishMetadata }
     });
     finished = true;
     return saved;
@@ -501,6 +516,7 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
     toolCalls: episode.toolCalls,
     recordToolCall,
     recordToolResult,
+    setMetadata,
     finish
   };
 }

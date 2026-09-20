@@ -168,9 +168,12 @@ There is no “unknown route” error. A prompt with no registered match simply
 continues to Pi's frontier model. In learning mode, that entire episode is
 captured locally as a redacted JSONL example in `.jbrancher/dataset.jsonl`:
 the task, ordered tool calls, bounded outputs, outcome, safety label, and a
-stable train/validation/test split. This gives you a private, incrementally
-built dataset without an external database. Use `/jbrancher dataset` to
-regenerate it after importing or editing traces.
+stable train/validation/test split. Each example also records
+`routeResolution` (`unmatched`, `uncertain`, `ambiguous`, `failed`, or another explicit
+resolution), so unknown work can be separated from route failures during
+curation. This gives you a private, incrementally built dataset without an
+external database. Use `/jbrancher dataset` to regenerate it after importing
+or editing traces.
 
 The local store is safe to share across simultaneous harness sessions. Route
 promotion, quarantine, trace appends, and dataset rewrites use atomic files and

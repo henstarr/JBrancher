@@ -108,7 +108,8 @@ export function createJBrancher({
       const result = await rule({ state: clone(state), task, history: clone(history), signal });
       if (!result) continue;
       assertPlainAction(result.action);
-      return { source: 'rule', action: clone(result.action), reason: result.reason ?? 'rule matched', usage: [] };
+      return { source: 'rule', action: clone(result.action), routeResolution: 'registered',
+        reason: result.reason ?? 'rule matched', usage: [] };
     }
 
     let candidates = [];
@@ -129,6 +130,7 @@ export function createJBrancher({
           .filter(match => candidates.some(candidate => sameAction(candidate, match.action)));
         if (learned.length === 1) {
           return { source: 'learned', action: clone(learned[0].action), routeId: learned[0].id,
+            routeResolution: 'learned',
             reason: 'A proven local read-only route matched', usage: [] };
         }
       } catch {
@@ -143,7 +145,7 @@ export function createJBrancher({
         evaluation = { scores: clone(verdict?.scores ?? []), usage: clone(verdict?.usage ?? []) };
         const selected = choose(verdict?.scores, candidates, minimumProbability, minimumMargin);
         if (selected) {
-          return { source: 'jev', action: selected.action, score: selected.score,
+          return { source: 'jev', action: selected.action, routeResolution: 'registered', score: selected.score,
             scores: selected.scores, selected: selected.index, candidates, evaluation, usage: clone(verdict?.usage ?? []) };
         }
       } catch (error) {
@@ -152,10 +154,14 @@ export function createJBrancher({
       }
     }
 
-    if (!actor) return { source: 'abstain', action: null, reason: 'No rule, confident evaluator, or actor was available', evaluation, usage: [] };
+    const routeResolution = candidates.length === 0
+      ? 'unmatched' : candidates.length === 1 ? 'uncertain' : 'ambiguous';
+    if (!actor) return { source: 'abstain', action: null, routeResolution,
+      reason: 'No rule, confident evaluator, or actor was available', evaluation, usage: [] };
     const result = await actor({ state: clone(state), task, history: clone(history), candidates: clone(candidates), signal });
     assertPlainAction(result?.action ?? null);
-    return { source: 'actor', action: clone(result?.action ?? null), evaluation, usage: clone(result?.usage ?? []) };
+    return { source: 'actor', action: clone(result?.action ?? null), routeResolution,
+      evaluation, usage: clone(result?.usage ?? []) };
   }
 
   function shouldRecord(decision) {
@@ -267,6 +273,7 @@ export function createJBrancher({
         metadata: {
           mode: 'step',
           decisionSource: event.decision.source,
+          ...(event.decision.routeResolution ? { routeResolution: event.decision.routeResolution } : {}),
           ...(learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
         }
       });
@@ -304,6 +311,7 @@ export function createJBrancher({
       }
       if (!Array.isArray(candidates) || !candidates.some(candidate => sameAction(candidate, action))) return null;
       const decision = { source: 'learned', action: clone(action), routeId: workflows[0].id,
+        routeResolution: 'learned',
         reason: 'A proven local read-only workflow matched', usage: [] };
       const event = { step: stepNumber, state: clone(state), decision: clone(decision) };
       try {
@@ -368,12 +376,14 @@ export function createJBrancher({
         state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
       }
       const outcome = await validatedOutcome({ task: input.task, state, history, events });
+      const routeResolution = events.find(event => event.decision?.routeResolution)?.decision.routeResolution;
       await finishRecorder(recorder, {
         recordEpisode,
         ...(outcome ? { outcome } : {}),
         metadata: {
           mode: 'run',
           steps: events.length,
+          ...(routeResolution ? { routeResolution } : {}),
           ...(learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
         }
       });
