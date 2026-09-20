@@ -34,6 +34,8 @@
 - Expand the local SWE-bench Lite replay to 14 prompts across seven repositories
   and normalize two conservative investigation wrappers so held-out route
   coverage remains measurable across varied issue text.
+- Run offline routing, token-optimization, and local-learning benchmarks in CI
+  alongside the test suite.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,
