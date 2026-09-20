@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -136,6 +136,12 @@ test('dataset fingerprints and splits remain stable across repeated episodes', (
   assert.equal(first.fingerprint, repeated.fingerprint);
   assert.equal(first.split, repeated.split);
   assert.notEqual(first.exampleId, repeated.exampleId);
+});
+
+test('task similarity ignores a conservative investigation wrapper', () => {
+  const task = 'astropy__astropy-12907: separability is wrong for nested compound models';
+  const wrapped = 'Please open the relevant test file to investigate this issue: ' + task;
+  assert.ok(taskSimilarity(task, wrapped) >= 0.8);
 });
 
 test('safe inspection commands can be learned while shell escapes and sensitive paths stay unsafe', () => {

@@ -4,6 +4,72 @@
   "retrievedAt": "2026-09-20",
   "instances": [
     {
+      "instance_id": "marshmallow-code__marshmallow-1343",
+      "repo": "marshmallow-code/marshmallow",
+      "problem_statement": "[version 2.20.0] Nested validation raises TypeError: 'NoneType' object is not subscriptable when invalid input is combined with a validates hook.",
+      "fail_to_pass": ["tests/test_marshalling.py::TestUnmarshaller::test_deserialize_wrong_nested_type_with_validates_method"]
+    },
+    {
+      "instance_id": "marshmallow-code__marshmallow-1359",
+      "repo": "marshmallow-code/marshmallow",
+      "problem_statement": "3.0: DateTime fields cannot be used as inner fields for List or Tuple fields because container binding raises AttributeError.",
+      "fail_to_pass": ["tests/test_fields.py::TestParentAndName::test_datetime_list_inner_format"]
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1072",
+      "repo": "pvlib/pvlib-python",
+      "problem_statement": "temperature.fuentes errors when given timezone-aware inputs on pandas 1.0 or newer; it should support timezone-aware timeseries.",
+      "fail_to_pass": ["pvlib/tests/test_temperature.py::test_fuentes_timezone[Etc/GMT+5]"]
+    },
+    {
+      "instance_id": "pvlib__pvlib-python-1154",
+      "repo": "pvlib/pvlib-python",
+      "problem_statement": "pvlib.irradiance.reindl() generates NaN or infinity when GHI is zero; zero sky diffuse should produce zero output.",
+      "fail_to_pass": ["pvlib/tests/test_irradiance.py::test_reindl"]
+    },
+    {
+      "instance_id": "pydicom__pydicom-1139",
+      "repo": "pydicom/pydicom",
+      "problem_statement": "PersonName3 is not iterable, so membership checks and iteration over a PersonName value raise TypeError.",
+      "fail_to_pass": ["pydicom/tests/test_valuerep.py::TestPersonName::test_next", "pydicom/tests/test_valuerep.py::TestPersonName::test_iterator", "pydicom/tests/test_valuerep.py::TestPersonName::test_contains"]
+    },
+    {
+      "instance_id": "pydicom__pydicom-1256",
+      "repo": "pydicom/pydicom",
+      "problem_statement": "from_json does not correctly convert BulkDataURI values inside SQ data elements when converting JSON back to DICOM.",
+      "fail_to_pass": ["pydicom/tests/test_json.py::TestBinary::test_bulk_data_reader_is_called_within_SQ"]
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1196",
+      "repo": "pylint-dev/astroid",
+      "problem_statement": "Dict.getitem() does not infer values from dictionary unpacking and can raise AttributeError instead of returning an inferred value or AstroidIndexError.",
+      "fail_to_pass": ["tests/unittest_python3.py::Python3TC::test_unpacking_in_dict_getitem_uninferable", "tests/unittest_python3.py::Python3TC::test_unpacking_in_dict_getitem_with_ref"]
+    },
+    {
+      "instance_id": "pylint-dev__astroid-1268",
+      "repo": "pylint-dev/astroid",
+      "problem_statement": "AsStringVisitor has no visit_unknown method when serializing astroid.nodes.Unknown().",
+      "fail_to_pass": ["tests/unittest_nodes.py::AsStringTest::test_as_string_unknown"]
+    },
+    {
+      "instance_id": "pyvista__pyvista-4315",
+      "repo": "pyvista/pyvista",
+      "problem_statement": "RectilinearGrid rejects Python sequences as inputs even though equivalent NumPy arrays work.",
+      "fail_to_pass": ["tests/test_grid.py::test_create_rectilinear_grid_from_specs"]
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1517",
+      "repo": "sqlfluff/sqlfluff",
+      "problem_statement": "ANSI SQL with a doubled semicolon crashes with 'Dropped elements in sequence matching' instead of being handled or reported cleanly.",
+      "fail_to_pass": ["test/dialects/ansi_test.py::test__dialect__ansi_multiple_semicolons[select"]
+    },
+    {
+      "instance_id": "sqlfluff__sqlfluff-1625",
+      "repo": "sqlfluff/sqlfluff",
+      "problem_statement": "TSQL rule L031 incorrectly reports an alias in a join condition when the query contains no join.",
+      "fail_to_pass": ["test/cli/commands_test.py::test__cli__command_directed"]
+    },
+    {
       "instance_id": "astropy__astropy-12907",
       "repo": "astropy/astropy",
       "problem_statement": "Modeling's separability_matrix does not compute separability correctly for nested CompoundModels. A nested Pix2Sky_TAN and Linear1D composition produces a non-diagonal matrix where the linear inputs and outputs should remain independent.",

@@ -22,13 +22,14 @@ npm run bench:offline -- --write results/routing.json
 
 ## Current local snapshot
 
-The reproducible local learning benchmark currently uses three real SWE-bench
-Lite problem statements, eight repetitions per task, and four warm-up attempts:
+The reproducible local learning benchmark currently uses 14 real SWE-bench Lite
+problem statements across seven repositories, eight repetitions per task, and
+four warm-up attempts:
 
-- Pi-style read-only replay: 24 simulated frontier calls down to 12 (50%
-  fewer), handling all 12 held-out post-warm-up attempts (100% held-out route
-  coverage) and saving 944 estimated prompt tokens.
-- Generic two-step harness replay: 72 actor calls down to 18 (75% fewer),
+- Pi-style read-only replay: 112 simulated frontier calls down to 56 (50%
+  fewer), handling all 56 held-out post-warm-up attempts (100% held-out route
+  coverage) and saving 3,224 estimated prompt tokens.
+- Generic two-step harness replay: 336 actor calls down to 84 (75% fewer),
   with 100% held-out learned-step coverage.
 - Postcondition-verified write arm: the third repeated action uses the learned
   route after two actor warm-ups, avoiding 33.3% of actor calls in that

@@ -13,6 +13,7 @@ const ROUTE_ACTION_WORDS = new Set([
   'check', 'display', 'find', 'get', 'inspect', 'list', 'look', 'open', 'read',
   'show', 'view'
 ]);
+const TASK_CONTEXT_PREFIX = /^(?:please\s+)?(?:open|read|inspect|look\s+at|check)\s+(?:the\s+)?(?:relevant\s+)?(?:test\s+)?files?\s+(?:(?:and\s+inspect\s+this\s+bug)|(?:to\s+(?:investigate|debug|understand|reproduce)\s+(?:this\s+)?(?:issue|bug|problem)))\s*:\s*/i;
 const READ_INTENT = /\b(read|open|show|view|inspect|display|look|list|cat|contents?|inside)\b/i;
 const WRITE_INTENT = /\b(delete|remove|write|edit|modify|change|update|create|run|execute|deploy|install)\b/i;
 const SENSITIVE_READ_PATH = /(^|[\\/])(?:\.env(?:\.[^\\/]+)*|credentials?(?:\.[^\\/]+)*|secrets?(?:\.[^\\/]+)*|passwords?(?:\.[^\\/]+)*|tokens?(?:\.[^\\/]+)*|[^\\/]*\.(?:pem|key|p12|pfx))$/i;
@@ -39,7 +40,8 @@ export function normalizeTask(value) {
 }
 
 function taskTokens(value) {
-  return new Set(normalizeTask(value)
+  const comparable = normalizeTask(value).replace(TASK_CONTEXT_PREFIX, '');
+  return new Set(comparable
     .split(/[^a-z0-9]+/)
     .filter(token => token.length > 1 && !ROUTE_STOP_WORDS.has(token) && !ROUTE_ACTION_WORDS.has(token)));
 }
