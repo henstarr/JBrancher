@@ -55,6 +55,14 @@ authenticated loopback hook server; global and project settings files are never 
 the wrapper. Managed policies or disabled hooks can prevent observation; check the
 printed `observed` count after exiting. A zero count does not demonstrate integration.
 
+To build the local workflow dataset while keeping the wrapper in shadow mode,
+set `JBRANCHER_LEARNING=1`. Episodes are written to the ignored `.jbrancher/`
+directory; this does not approve, deny, or replace Claude actions:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap claude --max-evaluations 0 -- -p "Read README.md"
+```
+
 **Data and budget:** the latest user prompt (up to 16,000 characters) and proposed
 tool arguments are sent to TypeSafe for at most 25 evaluations per launch by default.
 Repository files and transcripts are not read. Scores have limited context and are
@@ -79,6 +87,12 @@ This launches `codex exec --json`, preserving its JSONL stdout and exit status.
 Command events are scored in the background; permissions, hook trust, and config
 files are unchanged. Only command execution is observed—not MCP calls, file changes,
 or interactive/resumed sessions. This is shadow telemetry, not a speedup or tool gate.
+
+To record Codex command episodes in the same local learning dataset, use:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap codex --prompt "Check git status" --max-evaluations 0 -- --sandbox read-only --ephemeral
+```
 
 The initial prompt and command text are sent to TypeSafe (up to 16,000 characters
 each; oversized commands are skipped). The default cap is 25 evaluations, with

@@ -4,6 +4,7 @@ import { mkdir, writeFile, appendFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createJevEvaluator } from './jev.js';
+import { createEpisodeRecorder, createLocalLearningStore, refreshAndPromoteReadOnly } from './learning.js';
 
 export function parseCodexArgs(args) {
   if (args.shift() !== 'codex') throw new Error('Expected codex');
@@ -23,18 +24,34 @@ export function parseCodexArgs(args) {
 }
 
 // Stream observation only: never feeds a score back into Codex.
-export function createCodexObserver({ prompt, evaluate, maxEvaluations = 25, record = async () => {} }) {
+export function createCodexObserver({ prompt, evaluate, maxEvaluations = 25, record = async () => {}, learningStore, cwd = process.cwd() }) {
   if (!Number.isSafeInteger(maxEvaluations) || maxEvaluations < 0 || maxEvaluations > 1000) throw new Error('Invalid evaluation budget');
-  const seen = new Set(), pending = new Set();
+  const seen = new Set(), completed = new Set(), scored = new Set(), pending = new Set();
   const stats = { observed: 0, evaluated: 0, skipped: 0, unavailable: 0, logErrors: 0 };
+  const recorder = learningStore ? createEpisodeRecorder({ store: learningStore, task: prompt, cwd, source: 'codex' }) : null;
   return {
     stats,
     observe(event) {
       const item = event?.item;
       if (!['item.started', 'item.completed'].includes(event?.type) || item?.type !== 'command_execution'
-        || typeof item.id !== 'string' || typeof item.command !== 'string' || seen.has(item.id)) return;
-      seen.add(item.id);
-      stats.observed++;
+        || typeof item.id !== 'string' || typeof item.command !== 'string') return;
+      const isCompleted = event.type === 'item.completed';
+      if (isCompleted && completed.has(item.id)) return;
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        stats.observed++;
+        recorder?.recordToolCall({ toolCallId: item.id, toolName: 'bash', input: { command: item.command } });
+      }
+      if (isCompleted) {
+        completed.add(item.id);
+        recorder?.recordToolResult({
+          toolCallId: item.id,
+          isError: item.status === 'failed' || item.status === 'error',
+          output: item.aggregated_output ?? item.output ?? item.result ?? item.status
+        });
+      }
+      if (scored.has(item.id)) return;
+      scored.add(item.id);
       if (!evaluate || stats.evaluated >= maxEvaluations || pending.size >= 2 || item.command.length > 16000) {
         stats.skipped++; return;
       }
@@ -57,7 +74,17 @@ export function createCodexObserver({ prompt, evaluate, maxEvaluations = 25, rec
       pending.add(job);
       job.finally(() => pending.delete(job));
     },
-    async close() { await Promise.allSettled([...pending]); seen.clear(); }
+    async close() {
+      await Promise.allSettled([...pending]);
+      try {
+        const saved = await recorder?.finish({ metadata: { hookHarness: 'codex' } });
+        if (saved?.outcome === 'success' && typeof learningStore?.refreshCandidates === 'function') {
+          await refreshAndPromoteReadOnly(learningStore);
+        }
+      }
+      catch { stats.logErrors++; }
+      seen.clear(); completed.clear(); scored.clear();
+    }
   };
 }
 
@@ -81,7 +108,8 @@ export function createEventDecoder(observe, limit = 65536) {
 
 export async function wrapCodex({ prompt, args = [], maxEvaluations = 25, env = process.env,
   executable = process.platform === 'win32' ? 'codex.exe' : 'codex', evaluate,
-  logDirectory = join(homedir(), '.jbrancher', 'sessions'), output = process.stdout } = {}) {
+  logDirectory = join(homedir(), '.jbrancher', 'sessions'), output = process.stdout,
+  learning = env.JBRANCHER_LEARNING === '1', learningDirectory = join(process.cwd(), '.jbrancher') } = {}) {
   if (!prompt?.trim()) throw new Error('A prompt is required.');
   if (maxEvaluations > 0 && !evaluate && !env.TYPESAFE_API_KEY) throw new Error('Set TYPESAFE_API_KEY in .env, or use --max-evaluations 0.');
   const evaluator = maxEvaluations === 0 ? undefined : evaluate ?? createJevEvaluator({
@@ -89,8 +117,9 @@ export async function wrapCodex({ prompt, args = [], maxEvaluations = 25, env = 
   await mkdir(logDirectory, { recursive: true, mode: 0o700 });
   const logPath = join(logDirectory, `${randomUUID()}.jsonl`);
   await writeFile(logPath, '', { flag: 'wx', mode: 0o600 });
+  const learningStore = learning ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
   const observer = createCodexObserver({ prompt, evaluate: evaluator, maxEvaluations,
-    record: row => appendFile(logPath, JSON.stringify(row) + '\n') });
+    record: row => appendFile(logPath, JSON.stringify(row) + '\n'), learningStore });
   const childEnv = { ...env };
   delete childEnv.TYPESAFE_API_KEY;
   console.error(`JBrancher Codex shadow: up to ${maxEvaluations} evaluations. Scores: ${logPath}`);

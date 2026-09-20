@@ -19,7 +19,8 @@
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow
-  scoring in Codex batch sessions; validate a real authenticated read-only session.
+  scoring in Codex batch sessions, with opt-in local episode learning.
 - Add `jbrancher wrap claude` with session-scoped HTTP hooks, bounded background
-  Jev scoring, private score logs, and unchanged permission decisions.
+  Jev scoring, private score logs, opt-in local episode learning, and unchanged
+  permission decisions.
 - Document shadow mode and the outstanding authenticated Claude integration check.

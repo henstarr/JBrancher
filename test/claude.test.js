@@ -1,15 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startClaudeShadow, parseClaudeArgs, wrapClaude } from '../src/claude.js';
+import { createLocalLearningStore } from '../src/learning.js';
 
 async function post(service, input, authorized = true) {
   const hook = service.settings.hooks.PreToolUse[0].hooks[0];
   return fetch(hook.url, { method: 'POST', headers: {
     'Content-Type': 'application/json', ...(authorized ? hook.headers : {})
   }, body: JSON.stringify(input) });
+}
+async function postEvent(service, event, authorized = true) {
+  const hook = service.settings.hooks[event.hook_event_name][0].hooks[0];
+  return fetch(hook.url, { method: 'POST', headers: {
+    'Content-Type': 'application/json', ...(authorized ? hook.headers : {})
+  }, body: JSON.stringify(event) });
 }
 const prompt = { session_id: 's', prompt_id: 'p', hook_event_name: 'UserPromptSubmit', prompt: 'Read the README' };
 const tool = { session_id: 's', prompt_id: 'p', hook_event_name: 'PreToolUse',
@@ -55,6 +62,31 @@ test('missing context, malformed input and evaluator failure leave Claude decisi
   } finally { await service.close(); }
   assert.equal(rows[0].status, 'unavailable');
   assert.ok(!JSON.stringify(rows).includes('secret-provider-error'));
+});
+
+test('Claude learning hooks record a canonical local episode without changing hook replies', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-claude-learning-'));
+  const store = createLocalLearningStore({ directory });
+  const service = await startClaudeShadow({ maxEvaluations: 0, learningStore: store });
+  try {
+    await postEvent(service, { session_id: 'learn-session', prompt_id: 'learn-prompt', cwd: directory,
+      hook_event_name: 'UserPromptSubmit', prompt: 'read README.md' });
+    await postEvent(service, { session_id: 'learn-session', prompt_id: 'learn-prompt', cwd: directory,
+      hook_event_name: 'PreToolUse', tool_name: 'Read', tool_use_id: 'read-1', tool_input: { file_path: join(directory, 'README.md') } });
+    const result = await postEvent(service, { session_id: 'learn-session', prompt_id: 'learn-prompt', cwd: directory,
+      hook_event_name: 'PostToolUse', tool_name: 'Read', tool_use_id: 'read-1', tool_input: { file_path: join(directory, 'README.md') },
+      tool_response: 'README contents' });
+    assert.equal(result.status, 200);
+    await postEvent(service, { session_id: 'learn-session', cwd: directory, hook_event_name: 'Stop' });
+  } finally {
+    await service.close();
+  }
+  const traces = await store.readTraces();
+  assert.equal(traces.length, 1);
+  assert.equal(traces[0].outcome, 'success');
+  assert.equal(traces[0].toolCalls[0].toolName, 'read');
+  assert.equal(traces[0].toolCalls[0].input.path.toLowerCase(), 'readme.md');
+  await rm(directory, { recursive: true, force: true });
 });
 
 test('wrapper separates Claude arguments and rejects unsupported modes and conflicting settings', () => {

@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createCodexObserver, createEventDecoder, parseCodexArgs, wrapCodex } from '../src/codex.js';
+import { createLocalLearningStore } from '../src/learning.js';
 
 const event = (id = 'one', type = 'item.started') => ({ type, item: { id, type: 'command_execution', command: 'echo example' } });
 
@@ -34,6 +35,22 @@ test('Codex scores do not block ingestion; concurrency and failures are bounded'
   release(); await observer.close();
   assert.equal(observer.stats.unavailable, 2);
   assert.equal(observer.stats.logErrors, 2);
+});
+
+test('Codex learning records started and completed commands as one local episode', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-codex-learning-'));
+  const store = createLocalLearningStore({ directory });
+  const observer = createCodexObserver({ prompt: 'check git status', maxEvaluations: 0, learningStore: store });
+  observer.observe({ type: 'item.started', item: { id: 'command-1', type: 'command_execution', command: 'git status' } });
+  observer.observe({ type: 'item.completed', item: { id: 'command-1', type: 'command_execution', command: 'git status', status: 'completed' } });
+  observer.observe({ type: 'item.completed', item: { id: 'command-1', type: 'command_execution', command: 'git status', status: 'completed' } });
+  await observer.close();
+  const traces = await store.readTraces();
+  assert.equal(traces.length, 1);
+  assert.equal(traces[0].outcome, 'success');
+  assert.equal(traces[0].toolCalls.length, 1);
+  assert.equal(traces[0].toolCalls[0].toolName, 'bash');
+  await rm(directory, { recursive: true, force: true });
 });
 
 test('Codex rejects invalid scores and zero budget makes no requests', async () => {

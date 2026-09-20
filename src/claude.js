@@ -2,9 +2,28 @@ import { createServer } from 'node:http';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdir, mkdtemp, writeFile, appendFile, rm } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createJevEvaluator } from './jev.js';
+import { createEpisodeRecorder, createLocalLearningStore, refreshAndPromoteReadOnly } from './learning.js';
+
+function learningToolCall(input) {
+  const toolName = typeof input?.tool_name === 'string' ? input.tool_name : '';
+  const toolInput = input?.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  if (toolName.toLowerCase() === 'read' && typeof toolInput.file_path === 'string') {
+    const cwd = resolve(input.cwd || process.cwd());
+    const path = relative(cwd, resolve(cwd, toolInput.file_path));
+    return { toolName: 'read', input: {
+      path,
+      ...(toolInput.offset === undefined ? {} : { offset: toolInput.offset }),
+      ...(toolInput.limit === undefined ? {} : { limit: toolInput.limit })
+    } };
+  }
+  if (toolName.toLowerCase() === 'bash' && typeof toolInput.command === 'string') {
+    return { toolName: 'bash', input: { command: toolInput.command } };
+  }
+  return { toolName: toolName.toLowerCase() || 'unknown', input: toolInput };
+}
 
 export function parseClaudeArgs(args) {
   if (args.shift() !== 'claude') throw new Error('Usage: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
@@ -28,12 +47,25 @@ export function parseClaudeArgs(args) {
 }
 
 // HTTP callbacks always return {}. Scores never become permission decisions.
-export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record = async () => {} }) {
+export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record = async () => {}, learningStore } = {}) {
   if (!Number.isSafeInteger(maxEvaluations) || maxEvaluations < 0 || maxEvaluations > 1000) throw new Error('Invalid evaluation budget');
   const token = randomBytes(32).toString('hex');
   const prompts = new Map();
+  const episodes = new Map();
   const pending = new Set();
   const stats = { observed: 0, evaluated: 0, skipped: 0, unavailable: 0, logErrors: 0 };
+  async function finishEpisode(sessionId, outcome) {
+    const episode = episodes.get(sessionId);
+    if (!episode) return;
+    episodes.delete(sessionId);
+    try {
+      const saved = await episode.recorder.finish({ outcome, metadata: { hookHarness: 'claude' } });
+      if (saved.outcome === 'success' && typeof learningStore?.refreshCandidates === 'function') {
+        await refreshAndPromoteReadOnly(learningStore);
+      }
+    }
+    catch { stats.logErrors++; }
+  }
   const server = createServer(async (req, res) => {
     const reply = status => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end('{}'); };
     if (req.method !== 'POST' || req.url !== '/hooks' || req.headers.origin
@@ -51,8 +83,27 @@ export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record 
       if (input.hook_event_name === 'UserPromptSubmit' && typeof input.prompt === 'string') {
         if (prompts.size >= 32) prompts.delete(prompts.keys().next().value);
         prompts.set(key, input.prompt.slice(0, 16000));
+        if (learningStore) {
+          await finishEpisode(input.session_id);
+          episodes.set(input.session_id, {
+            promptId: input.prompt_id,
+            recorder: createEpisodeRecorder({
+              store: learningStore,
+              task: input.prompt,
+              cwd: input.cwd || process.cwd(),
+              source: 'claude'
+            })
+          });
+        }
       }
       if (input.hook_event_name === 'PreToolUse') {
+        const episode = episodes.get(input.session_id);
+        if (episode && (!episode.promptId || !input.prompt_id || episode.promptId === input.prompt_id)) {
+          episode.recorder.recordToolCall({
+            toolCallId: input.tool_use_id,
+            ...learningToolCall(input)
+          });
+        }
         stats.observed++;
         const prompt = prompts.get(key);
         if (!prompt || !evaluate || stats.evaluated >= maxEvaluations || pending.size >= 2
@@ -80,12 +131,29 @@ export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record 
           job.finally(() => pending.delete(job));
         }
       }
+      if (input.hook_event_name === 'PostToolUse' || input.hook_event_name === 'PostToolUseFailure') {
+        const episode = episodes.get(input.session_id);
+        if (episode && (!episode.promptId || !input.prompt_id || episode.promptId === input.prompt_id)) {
+          episode.recorder.recordToolResult({
+            toolCallId: input.tool_use_id,
+            isError: input.hook_event_name === 'PostToolUseFailure',
+            output: input.tool_response ?? input.error
+          });
+        }
+      }
+      if (input.hook_event_name === 'Stop' || input.hook_event_name === 'StopFailure') {
+        await finishEpisode(input.session_id, input.hook_event_name === 'StopFailure' ? 'unknown' : undefined);
+      }
+      if (input.hook_event_name === 'SessionEnd') await finishEpisode(input.session_id, 'unknown');
       reply(200);
     } catch { if (!res.headersSent) reply(400); }
   });
   server.requestTimeout = 5000;
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  const settings = { hooks: Object.fromEntries(['UserPromptSubmit', 'PreToolUse'].map(event => [event, [{
+  const hookEvents = learningStore
+    ? ['UserPromptSubmit', 'PreToolUse', 'PostToolUse', 'PostToolUseFailure', 'Stop', 'StopFailure', 'SessionEnd']
+    : ['UserPromptSubmit', 'PreToolUse'];
+  const settings = { hooks: Object.fromEntries(hookEvents.map(event => [event, [{
     hooks: [{ type: 'http', url: `http://127.0.0.1:${server.address().port}/hooks`,
       headers: { Authorization: `Bearer ${token}` }, timeout: 2 }]
   }]])) };
@@ -93,13 +161,16 @@ export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record 
     server.closeAllConnections();
     await new Promise(resolve => server.close(resolve));
     await Promise.allSettled([...pending]);
+    await Promise.all([...episodes.keys()].map(sessionId => finishEpisode(sessionId, 'unknown')));
     prompts.clear();
+    episodes.clear();
   } };
 }
 
 export async function wrapClaude({ args = [], maxEvaluations = 25,
   env = process.env, executable = process.platform === 'win32' ? 'claude.exe' : 'claude',
-  evaluate, logDirectory = join(homedir(), '.jbrancher', 'sessions') } = {}) {
+  evaluate, logDirectory = join(homedir(), '.jbrancher', 'sessions'), learning = env.JBRANCHER_LEARNING === '1',
+  learningDirectory = join(process.cwd(), '.jbrancher') } = {}) {
   if (maxEvaluations > 0 && !evaluate && !env.TYPESAFE_API_KEY) {
     throw new Error('Set TYPESAFE_API_KEY in .env, or use --max-evaluations 0 for local hook diagnostics.');
   }
@@ -110,10 +181,11 @@ export async function wrapClaude({ args = [], maxEvaluations = 25,
   const logPath = join(logDirectory, `${randomUUID()}.jsonl`);
   await writeFile(logPath, '', { mode: 0o600, flag: 'wx' });
   const temporary = await mkdtemp(join(tmpdir(), 'jbrancher-claude-'));
+  const learningStore = learning ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
   let service;
   try {
     service = await startClaudeShadow({ evaluate: evaluator, maxEvaluations,
-      record: row => appendFile(logPath, JSON.stringify(row) + '\n') });
+      record: row => appendFile(logPath, JSON.stringify(row) + '\n'), learningStore });
     const settingsPath = join(temporary, 'settings.json');
     await writeFile(settingsPath, JSON.stringify(service.settings), { mode: 0o600 });
     const childEnv = { ...env };

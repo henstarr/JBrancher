@@ -25,6 +25,20 @@ through stdin and owns JSON output. Interactive mode, resume, and fork are unsup
   no retries. Pending evaluations finish at shutdown. Skipped commands are counted.
 - Ignore malformed/oversized event lines for observation while still forwarding them.
 
+## Local workflow learning
+
+Set `JBRANCHER_LEARNING=1` to record command episodes in the project-local,
+ignored `.jbrancher/` directory. Use `--max-evaluations 0` when you want local
+dataset collection without Jev requests:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap codex --prompt "Check git status" --max-evaluations 0 -- --sandbox read-only --ephemeral
+```
+
+Started and completed command events are joined into one redacted episode. The
+wrapper remains shadow-only: Codex permissions, execution, and output are not
+changed.
+
 The wrapper does not observe MCP calls, web searches, or file-change items. A zero
 observed count is not proof of integration. Native hooks have a separate review/trust
 workflow; this adapter intentionally uses stream observation instead. Execution may

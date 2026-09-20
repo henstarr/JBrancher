@@ -339,6 +339,9 @@ export function buildDataset(traces, { includeUnknown = true } = {}) {
 
 function outputPreview(value) {
   if (typeof value === 'string') return redactText(value, 500);
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    try { return redactText(JSON.stringify(value), 500); } catch { return undefined; }
+  }
   if (!Array.isArray(value)) return undefined;
   const text = value
     .filter(item => item?.type === 'text' && typeof item.text === 'string')
@@ -491,4 +494,16 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
   }
 
   return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote };
+}
+
+export async function refreshAndPromoteReadOnly(store, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
+  if (!store || typeof store.refreshCandidates !== 'function' || typeof store.promote !== 'function') {
+    throw new TypeError('A complete learning store is required');
+  }
+  const routes = await store.refreshCandidates({ minimumObservations, minimumSimilarity });
+  const promotable = routes.filter(route => route.status === 'candidate'
+    && route.safety === 'read-only'
+    && route.observations >= minimumObservations);
+  for (const route of promotable) await store.promote(route.id);
+  return { routes, promoted: promotable };
 }

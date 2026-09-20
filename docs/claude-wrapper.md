@@ -4,6 +4,9 @@ The initial integration is shadow-only. `jbrancher wrap claude` launches the
 native CLI with temporary `--settings` containing authenticated HTTP hooks for
 `UserPromptSubmit` and `PreToolUse`. Hook replies are always empty JSON objects;
 scores cannot become permission decisions. Existing permissions still apply.
+When `JBRANCHER_LEARNING=1` is set, the wrapper additionally observes
+`PostToolUse`, `PostToolUseFailure`, `Stop`, `StopFailure`, and `SessionEnd` to
+record complete local episodes.
 
 The wrapper launches without a shell, passes arguments after `--` directly,
 inherits terminal IO, propagates exit codes, forwards termination signals, and
@@ -22,6 +25,19 @@ files are read by the wrapper. Logs store only score, timestamp, elapsed inferen
 time, availability status and counters. The TypeSafe key is removed from the
 launched child's environment; this does not prevent Claude from accessing an
 otherwise readable `.env` file. Protect local credentials through normal permissions.
+
+## Local workflow learning
+
+Enable learning without making any Jev requests:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap claude --max-evaluations 0 -- -p "Read README.md"
+```
+
+The wrapper writes redacted traces, dataset rows, and learned candidates to the
+ignored `.jbrancher/` directory in the current working directory. Claude still
+owns every permission and execution decision; this mode only records what
+happened so a later JBrancher-enabled run can learn from it.
 
 ## Verification on 2026-09-18
 

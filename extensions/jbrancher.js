@@ -1,7 +1,7 @@
 import { access, readFile as readTextFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes } from '../src/learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, refreshAndPromoteReadOnly } from '../src/learning.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
 
@@ -235,15 +235,11 @@ export default async function jbrancherPiExtension(pi) {
     try {
       await pending.finish({ outcome, metadata: { mode } });
       if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
-        const routes = await learning.store.refreshCandidates({
+        const learned = await refreshAndPromoteReadOnly(learning.store, {
           minimumObservations: Number(config.minimumObservations || 2),
           minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
-        const promotable = routes.filter(route => route.status === 'candidate'
-          && route.safety === 'read-only'
-          && route.observations >= Number(config.minimumObservations || 2));
-        for (const route of promotable) await learning.store.promote(route.id);
-        if (promotable.length > 0) {
+        if (learned.promoted.length > 0) {
           await load(cwd);
           // Do not touch the agent context after an awaited reload: print-mode
           // sessions may already be replacing or shutting down their context.
@@ -274,11 +270,11 @@ export default async function jbrancherPiExtension(pi) {
           notify(ctx, 'Enable local learning with JBRANCHER_PI_LEARNING=1 or JBRANCHER_PI_MODE=learning.');
           return;
         }
-        const routes = await runtime.learning.store.refreshCandidates({
+        const learned = await runtime.learning.store.refreshCandidates({
           minimumObservations: Number(config.minimumObservations || 2),
           minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
-        const candidates = routes.filter(route => route.status === 'candidate');
+        const candidates = learned.filter(route => route.status === 'candidate');
         notify(ctx, candidates.length
           ? `Learned ${candidates.length} candidate route(s): ${candidates.map(route => `${route.id} [${route.safety}]`).join(', ')}`
           : 'No repeated successful workflows are ready to become candidates.');
