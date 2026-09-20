@@ -201,6 +201,16 @@ Run the local replay benchmark:
 npm run bench:learning
 ```
 
+The same local store can be mined outside a running Pi session:
+
+```sh
+npx jbrancher learn --dir .jbrancher
+```
+
+This command needs no API key. It rewrites the redacted dataset and promotes
+only safe read-only candidates; use `--min-observations` and
+`--min-similarity` to make promotion more conservative.
+
 It uses three real SWE-bench Lite bug statements and deterministic read traces
 to measure warm-up versus reuse. It reports frontier-call and estimated prompt
 token savings, but does not claim official SWE-bench patch success because it

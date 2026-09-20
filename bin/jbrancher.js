@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
+import { createLocalLearningStore, refreshAndPromoteReadOnly } from '../src/learning.js';
 import { createJBrancherServer } from '../src/server.js';
 import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
 import { parseCodexArgs, wrapCodex } from '../src/codex.js';
@@ -25,7 +26,7 @@ function loadDotEnv(file = resolve(process.cwd(), '.env')) {
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
-  console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  learn       Mine local traces and refresh safe learned routes\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher learn [--dir .jbrancher]\n  Writes a redacted dataset and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
 }
 
 function flag(name, fallback) {
@@ -85,6 +86,33 @@ async function liveCheck() {
   console.log(JSON.stringify({ model: 'jev-1.13.0', cases: rows }, null, 2));
 }
 
+async function learn() {
+  const directory = resolve(process.cwd(), flag('--dir', '.jbrancher'));
+  const minimumObservations = Number(flag('--min-observations', '2'));
+  const minimumSimilarity = Number(flag('--min-similarity', '0.8'));
+  if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
+    throw new Error('Invalid --min-observations');
+  }
+  if (!Number.isFinite(minimumSimilarity) || minimumSimilarity < 0 || minimumSimilarity > 1) {
+    throw new Error('Invalid --min-similarity');
+  }
+  const store = createLocalLearningStore({ directory });
+  const learned = await refreshAndPromoteReadOnly(store, { minimumObservations, minimumSimilarity });
+  const traces = await store.readTraces();
+  const dataset = await store.writeDataset();
+  const routes = await store.readRoutes();
+  console.log(JSON.stringify({
+    directory,
+    traces: traces.length,
+    datasetExamples: dataset.examples.length,
+    candidates: routes.filter(route => route.status === 'candidate').length,
+    activeReadOnlyRoutes: routes.filter(route => route.status === 'active' && route.safety === 'read-only').length,
+    promoted: learned.promoted.map(route => route.id),
+    datasetPath: dataset.path,
+    routesPath: store.routesPath
+  }, null, 2));
+}
+
 async function main() {
   const command = process.argv[2] ?? 'help';
   if (command === 'help' || command === '--help' || command === '-h') return printHelp();
@@ -105,6 +133,7 @@ async function main() {
     if (!report.nodeSupported || !report.typesafeKeyConfigured) process.exitCode = 1;
     return;
   }
+  if (command === 'learn') return learn();
   if (command === 'proxy') return proxy();
   if (command === 'live-check') return liveCheck();
   throw new Error(`Unknown command: ${command}`);

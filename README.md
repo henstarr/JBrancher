@@ -291,7 +291,12 @@ npx jbrancher demo
 ```sh
 npx jbrancher doctor
 npx jbrancher demo
+npx jbrancher learn --dir .jbrancher
 ```
+
+`jbrancher learn` is offline: it mines the local redacted traces, rewrites the
+portable `dataset.jsonl`, and promotes only safe read-only candidates. It never
+needs the TypeSafe key or an external database.
 
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
 
