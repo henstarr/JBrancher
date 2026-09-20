@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { createJBrancher } from './index.js';
 import { createJevEvaluator } from './jev.js';
+import { createOpenWorldLearner } from './discovery.js';
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -51,15 +52,35 @@ export function createJBrancherServer({
   endpoint,
   timeoutMs = 5000,
   fetchImpl,
-  evaluate
+  evaluate,
+  learningDirectory,
+  learningSource = 'proxy',
+  learningCwd = process.cwd(),
+  learningAutoPromote = true,
+  learningMinimumObservations = 2,
+  learningCandidateMinimumObservations = 1,
+  learningMinimumSimilarity = 0.8
 } = {}) {
   const evaluator = evaluate ?? (apiKey ? createJevEvaluator({ apiKey, model, endpoint, timeoutMs, fetchImpl }) : undefined);
+  const learner = typeof learningDirectory === 'string' && learningDirectory
+    ? createOpenWorldLearner({
+      directory: learningDirectory,
+      source: learningSource,
+      cwd: learningCwd,
+      autoPromote: learningAutoPromote,
+      minimumObservations: learningMinimumObservations,
+      candidateMinimumObservations: learningCandidateMinimumObservations,
+      minimumSimilarity: learningMinimumSimilarity
+    })
+    : undefined;
   const stats = {
     requestsTotal: 0,
     decisionsTotal: 0,
+    episodesRecorded: 0,
     evaluatorCalls: 0,
     unavailable: 0,
     errors: 0,
+    learningErrors: 0,
     sources: {}
   };
 
@@ -70,11 +91,77 @@ export function createJBrancherServer({
         return sendJson(response, 200, {
           status: 'healthy',
           model,
-          evaluatorConfigured: Boolean(evaluator)
+          evaluatorConfigured: Boolean(evaluator),
+          learningConfigured: Boolean(learner)
         });
       }
       if (request.method === 'GET' && url.pathname === '/stats') {
         return sendJson(response, 200, stats);
+      }
+      if (request.method === 'GET' && url.pathname === '/v1/learning') {
+        if (!learner) return sendJson(response, 404, { error: 'Learning is not configured' });
+        try {
+          return sendJson(response, 200, await learner.snapshot());
+        } catch (error) {
+          stats.learningErrors += 1;
+          throw error;
+        }
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/episodes') {
+        if (!learner) return sendJson(response, 404, { error: 'Learning is not configured' });
+        const input = await readJson(request);
+        if (typeof input.task !== 'string' || !input.task.trim()) {
+          return sendJson(response, 400, { error: 'task must be a non-empty string' });
+        }
+        if (!Array.isArray(input.toolCalls)) {
+          return sendJson(response, 400, { error: 'toolCalls must be an array' });
+        }
+        for (const call of input.toolCalls) {
+          if (!call || typeof call !== 'object'
+            || typeof call.toolName !== 'string' || !call.toolName
+            || !Object.hasOwn(call, 'input')) {
+            return sendJson(response, 400, {
+              error: 'each toolCall needs toolName and input'
+            });
+          }
+        }
+        const episode = learner.begin({
+          task: input.task,
+          episodeCwd: input.cwd ?? learningCwd,
+          episodeSource: input.source ?? learningSource,
+          routeResolution: input.routeResolution ?? 'unmatched',
+          metadata: input.metadata ?? {}
+        });
+        try {
+          for (const [index, call] of input.toolCalls.entries()) {
+            const toolCallId = call.toolCallId ?? `episode-call-${index}`;
+            episode.recordToolCall({
+              toolCallId,
+              toolName: call.toolName,
+              input: call.input,
+              context: call.context
+            });
+            if (Object.hasOwn(call, 'ok') || Object.hasOwn(call, 'output') || Object.hasOwn(call, 'content')) {
+              episode.recordToolResult({
+                toolCallId,
+                isError: call.ok === false,
+                output: call.output ?? call.content
+              });
+            }
+          }
+          const trace = await episode.finish({
+            outcome: input.outcome,
+            metadata: input.finishMetadata ?? {}
+          });
+          stats.episodesRecorded += 1;
+          return sendJson(response, 201, {
+            trace,
+            learning: await learner.snapshot()
+          });
+        } catch (error) {
+          stats.learningErrors += 1;
+          throw error;
+        }
       }
       if (request.method !== 'POST' || url.pathname !== '/v1/decide') {
         return sendJson(response, 404, { error: 'Not found' });

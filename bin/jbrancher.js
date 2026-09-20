@@ -12,7 +12,7 @@ import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --mode shadow|adaptive --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow|adaptive] [--max-evaluations 25] -- [Claude arguments]');
-  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only]\n  Writes dataset.jsonl without changing route status.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only]\n  Writes dataset.jsonl without changing route status.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787 [--learning-dir .jbrancher]\n  POST /v1/decide with task, state, history, and candidates\n  POST /v1/episodes to record an open-world harness episode\n  GET  /health, /stats, or /v1/learning\n  --learning-dir also enables ingestion-only mode without a Jev key\n`);
 }
 
 function flag(name, fallback) {
@@ -22,19 +22,23 @@ function flag(name, fallback) {
 
 async function proxy() {
   loadDotEnv();
-  if (!process.env.TYPESAFE_API_KEY) {
-    throw new Error('TYPESAFE_API_KEY is not configured. Put it in .env or the process environment.');
-  }
   const port = Number(flag('--port', '8787'));
   const host = flag('--host', '127.0.0.1');
+  const learningDirectory = process.argv.includes('--learning-dir')
+    ? resolve(process.cwd(), flag('--learning-dir', '.jbrancher'))
+    : undefined;
+  if (!process.env.TYPESAFE_API_KEY && !learningDirectory) {
+    throw new Error('TYPESAFE_API_KEY is not configured. Put it in .env or the process environment, or pass --learning-dir for ingestion-only mode.');
+  }
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid --port');
   const service = createJBrancherServer({
     apiKey: process.env.TYPESAFE_API_KEY,
     model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
-    timeoutMs: Number(process.env.JBRANCHER_TIMEOUT_MS ?? 5000)
+    timeoutMs: Number(process.env.JBRANCHER_TIMEOUT_MS ?? 5000),
+    learningDirectory
   });
   const address = await service.listen({ host, port });
-  console.log(JSON.stringify({ status: 'listening', ...address, endpoints: ['/health', '/stats', '/v1/decide'] }));
+  console.log(JSON.stringify({ status: 'listening', ...address, endpoints: ['/health', '/stats', '/v1/decide', ...(learningDirectory ? ['/v1/episodes', '/v1/learning'] : [])] }));
   const shutdown = async () => {
     await service.close();
     process.exit(0);

@@ -425,7 +425,7 @@ The command makes three synthetic requests and prints only decisions, scores, an
 For Python, Go, Rust, or another harness, run the local decision service:
 
 ```sh
-TYPESAFE_API_KEY=your-key npx jbrancher proxy --port 8787
+TYPESAFE_API_KEY=your-key npx jbrancher proxy --port 8787 --learning-dir .jbrancher
 ```
 
 Submit a bounded candidate set:
@@ -445,7 +445,38 @@ curl http://127.0.0.1:8787/v1/decide \
   }'
 ```
 
-The proxy exposes `GET /health` and `GET /stats`. It is a decision proxy, not a transparent OpenAI/Anthropic replacement: the caller must supply the actions that are legal in the current harness state. This is what keeps JBrancher bounded and prevents it from inventing executable work.
+The proxy exposes `GET /health`, `GET /stats`, and (when `--learning-dir` is supplied) `GET /v1/learning`. It is a decision proxy, not a transparent OpenAI/Anthropic replacement: the caller must supply the actions that are legal in the current harness state. This is what keeps JBrancher bounded and prevents it from inventing executable work.
+
+### Recording unknown routes for future reuse
+
+Open-world harnesses can send completed frontier trajectories to the same local
+service without pre-registering the route. JBrancher redacts sensitive values,
+writes the trace to `.jbrancher/traces.jsonl`, exports a dataset row, and can
+mine repeated successful behavior into a candidate route:
+
+```sh
+curl http://127.0.0.1:8787/v1/episodes \
+  -H 'content-type: application/json' \
+  -d '{
+    "task": "Inspect the repository and run its tests",
+    "source": "my-harness",
+    "routeResolution": "unmatched",
+    "toolCalls": [{
+      "toolName": "bash",
+      "input": {"command": "npm test"},
+      "context": {"candidateCount": 0},
+      "ok": true,
+      "output": "tests passed"
+    }],
+    "outcome": "success"
+  }'
+```
+
+The episode endpoint is the bridge for Python, Go, Rust, Pi, and Harbor
+adapters: the harness still executes the frontier action, while JBrancher owns
+redaction, durable local traces, dataset construction, and conservative route
+promotion. The storage is local JSONL/JSON by design; bind the proxy to
+localhost unless you add your own authentication and network boundary.
 
 ## Use in a harness
 

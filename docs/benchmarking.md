@@ -243,12 +243,22 @@ dataset.
 
 Harbor is the current harness for running Terminal-Bench 2.0. The right integration is a custom Harbor agent that owns the normal terminal loop and invokes JBrancher at the next-action boundary. Keep the benchmark task and verifier unchanged.
 
+Harbor's current custom-agent boundary is a `BaseAgent` with `name()`,
+`version()`, async `setup(environment)`, and async
+`run(instruction, environment, context)` methods. A Python adapter can call
+JBrancher's local `POST /v1/decide` endpoint when it has a bounded candidate
+set, execute the selected action in Harbor's environment, and post the
+completed open-world trajectory to `POST /v1/episodes`. That makes unknown
+routes learnable without making the benchmark harness depend on a JavaScript
+runtime. JBrancher does not currently ship a Python Harbor class, so this
+bridge is an integration seam rather than an assertion that Harbor has already
+been run in this repository.
+
 The initial run should be small and paired:
 
 ```sh
-harbor run --dataset terminal-bench@2.0 \
+harbor run -d "terminal-bench/terminal-bench-2" \
   --agent path.to.jbrancher_agent:JBrancherAgent \
-  --model <same-model-as-control> \
   --n-concurrent 4
 ```
 

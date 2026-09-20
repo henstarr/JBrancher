@@ -446,3 +446,51 @@ test('decision service exposes health, decisions, and stats without exposing cre
     await service.close();
   }
 });
+
+test('decision service ingests open-world episodes into the local learning dataset', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-proxy-learning-'));
+  const service = createJBrancherServer({
+    evaluate: async () => ({ scores: [0.9], usage: [] }),
+    learningDirectory: directory,
+    learningSource: 'test-proxy'
+  });
+  const address = await service.listen({ port: 0 });
+  try {
+    const baseUrl = `http://${address.host}:${address.port}`;
+    const health = await fetch(`${baseUrl}/health`).then(response => response.json());
+    assert.equal(health.learningConfigured, true);
+    const response = await fetch(`${baseUrl}/v1/episodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Inspect the project and run its tests',
+        source: 'python-harness',
+        routeResolution: 'unmatched',
+        metadata: { runId: 'redacted-test-run' },
+        toolCalls: [{
+          toolCallId: 'call-1',
+          toolName: 'bash',
+          input: { command: 'npm test' },
+          context: { candidateCount: 0 },
+          ok: true,
+          output: 'all tests passed'
+        }],
+        outcome: 'success'
+      })
+    });
+    assert.equal(response.status, 201);
+    const body = await response.json();
+    assert.equal(body.trace.outcome, 'success');
+    assert.equal(body.trace.source, 'python-harness');
+    assert.equal(body.learning.traces, 1);
+    assert.equal(body.learning.outcomes.success, 1);
+    assert.equal(body.learning.resolutions.unmatched, 1);
+    const stats = await fetch(`${baseUrl}/stats`).then(result => result.json());
+    assert.equal(stats.episodesRecorded, 1);
+    const learning = await fetch(`${baseUrl}/v1/learning`).then(result => result.json());
+    assert.equal(learning.traces, 1);
+  } finally {
+    await service.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
