@@ -144,6 +144,20 @@ The one-task pilot is in [docs/live-codex-2026-09-20.md](live-codex-2026-09-20.m
 and the larger three-task sample is in
 [docs/live-codex-3tasks-2026-09-20.md](live-codex-3tasks-2026-09-20.md).
 
+To exercise the same learning path through the language-agnostic HTTP proxy,
+run:
+
+```sh
+npm run bench:live-codex-proxy -- --instances 1 --repetitions 3 \
+  --actor-input-rate 3 --actor-output-rate 15
+```
+
+This keeps Codex as the frontier fallback, sends every route decision through
+the local proxy, and records real Codex usage plus learned-route completion
+feedback. It is opt-in and requires the local Codex CLI; it is not part of CI.
+The checked-in one-task result is in
+[docs/live-codex-proxy-2026-09-20.md](live-codex-proxy-2026-09-20.md).
+
 ```sh
 python -m pip install -r benchmarks/requirements.txt
 ```

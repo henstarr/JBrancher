@@ -18,6 +18,8 @@
   read-only promotion remains the default.
 - Quarantine a learned proxy route when a harness reports a failed outcome or
   postcondition.
+- Add an opt-in live Codex benchmark that exercises the local HTTP proxy and
+  measures real frontier token savings.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.
