@@ -21,7 +21,8 @@ async function matches(route, input) {
 }
 
 function routeAction(route) {
-  return { tool: 'jbrancher.route', args: { routeId: route.id } };
+  const description = typeof route.description === 'string' ? route.description.slice(0, 500) : route.id;
+  return { tool: 'jbrancher.route', args: { routeId: route.id }, description };
 }
 
 function validateThreshold(value, name) {

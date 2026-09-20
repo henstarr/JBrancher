@@ -81,6 +81,17 @@ Docker-backed run:
 python -m pip install -r benchmarks/requirements.txt
 ```
 
+For the Pi-specific route-choice path, run the similarly bounded live check:
+
+```sh
+npm run bench:live-pi-learning -- --instances 1 --repetitions 4
+```
+
+It promotes a preference only when the deterministic route verifier returns
+the expected result, then reports real Jev calls, usage, and learned coverage.
+The latest checked-in Pi result is summarized in
+[docs/live-pi-learning-2026-09-20.md](live-pi-learning-2026-09-20.md).
+
 The fixture compares three controls:
 
 - `actor-only`: the existing actor chooses every step.

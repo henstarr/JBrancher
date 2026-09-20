@@ -50,6 +50,10 @@
 - Add opt-in Pi preference learning: repeated successful Jev route choices are
   cached locally, reused only against the current matched route set, and
   quarantined after failure.
+- Add a bounded live Pi preference benchmark with deterministic verification and
+  real Jev usage reporting.
+- Check in the first live Pi preference result: 4 Jev calls reduced to 2 with
+  100% verified learned-route coverage.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

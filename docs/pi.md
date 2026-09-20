@@ -116,7 +116,11 @@ file. It is used only when the same task matches the same route ID in the
 current harness-provided route set. A failed preferred route is quarantined and
 the normal Jev/frontier path resumes. Enable this only for routes whose
 repeated execution is safe; explicit route authorization and execution remain
-the harness's responsibility.
+the harness's responsibility. Measure the live cost effect with:
+
+```sh
+npm run bench:live-pi-learning -- --instances 1 --repetitions 4
+```
 
 ## Built-in routes
 
