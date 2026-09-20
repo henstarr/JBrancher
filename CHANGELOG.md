@@ -40,6 +40,8 @@
   its current Astropy `FAIL_TO_PASS` identifier.
 - Make the local proxy benchmark cover all 14 checked-in SWE-bench Lite
   instances by default; smaller runs remain available with `--instances`.
+- Add an explicit live Hugging Face provenance check for fixture instance IDs
+  and `FAIL_TO_PASS` values.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

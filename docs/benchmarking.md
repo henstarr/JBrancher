@@ -59,6 +59,16 @@ checked-in problem statements are compact summaries; the `FAIL_TO_PASS` values
 and split provenance are recorded in the fixture:
 `benchmarks/fixtures/swebench-lite-mini.json`.
 
+Validate the fixture against the live Hugging Face rows when refreshing the
+benchmark source:
+
+```sh
+npm run bench:provenance
+```
+
+This command is benchmark tooling only. JBrancher itself does not fetch the
+dataset, use a hosted database, or require network access at runtime.
+
 - Pi-style read-only replay: 112 simulated frontier calls down to 56 (50%
   fewer), handling all 56 held-out post-warm-up attempts (100% held-out route
   coverage) and saving 3,224 estimated prompt tokens.
