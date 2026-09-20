@@ -104,7 +104,7 @@ for (let iteration = 0; iteration < 20; iteration++) {
     selectedTokens: best.selectedTokens, coverage: best.coverage });
 }
 const optimized = await runConfig(current);
-console.log(JSON.stringify({
+const report = {
   benchmark: 'JBrancher context token optimization hill climb',
   caveat: 'Synthetic relevance oracle and estimated context tokens; validates optimizer behavior, not frontier task quality.',
   baseline: { selectedTokens: baseline.baselineTokens, coverage: baseline.coverage },
@@ -113,4 +113,9 @@ console.log(JSON.stringify({
     reduction: Number((optimized.savedTokens / optimized.baselineTokens).toFixed(3)), coverage: optimized.coverage },
   accepted,
   rows: optimized.rows
-}, null, 2));
+};
+if (process.argv.includes('--assert')
+  && (!optimized.valid || optimized.coverage < 1 || optimized.selectedTokens >= baseline.baselineTokens)) {
+  throw new Error('Token benchmark assertions failed: optimization lost coverage or tokens');
+}
+console.log(JSON.stringify(report, null, 2));

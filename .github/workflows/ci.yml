@@ -23,6 +23,6 @@ jobs:
           node-version: ${{ matrix.node }}
       - run: npm test
       - run: npm run demo
-      - run: npm run bench:offline
-      - run: npm run bench:tokens
-      - run: npm run bench:learning
+      - run: npm run bench:offline -- --assert
+      - run: npm run bench:tokens -- --assert
+      - run: npm run bench:learning -- --assert

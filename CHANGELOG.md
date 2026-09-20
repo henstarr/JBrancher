@@ -36,6 +36,8 @@
   coverage remains measurable across varied issue text.
 - Run offline routing, token-optimization, and local-learning benchmarks in CI
   alongside the test suite.
+- Add benchmark `--assert` gates so coverage and efficiency regressions fail in
+  local and CI runs instead of remaining informational output.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

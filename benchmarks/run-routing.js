@@ -145,6 +145,16 @@ const report = {
   ]
 };
 
+if (process.argv.includes('--assert')) {
+  const [actorOnly, rules, jbrancher] = report.controls;
+  const failures = [];
+  if (report.controls.some(control => control.decisionAccuracy !== 1)) failures.push('decision accuracy regressed');
+  if (rules.actorCalls >= actorOnly.actorCalls) failures.push('rules did not avoid an actor call');
+  if (jbrancher.actorCalls >= actorOnly.actorCalls) failures.push('JBrancher did not avoid an actor call');
+  if (jbrancher.evaluatorCalls < 1) failures.push('JBrancher evaluator was not exercised');
+  if (failures.length) throw new Error(`Offline benchmark assertions failed: ${failures.join('; ')}`);
+}
+
 const writeIndex = process.argv.indexOf('--write');
 if (writeIndex !== -1 && process.argv[writeIndex + 1]) {
   const path = process.argv[writeIndex + 1];

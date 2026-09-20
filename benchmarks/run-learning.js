@@ -206,7 +206,7 @@ try {
   const genericLearnedActorCalls = genericRows.reduce((sum, row) => sum + row.actorCalls, 0);
   const pathTemplate = await benchmarkPathTemplate(pathTemplateStore);
   const verifiedWorkflow = await benchmarkVerifiedWorkflow(verifiedStore);
-  console.log(JSON.stringify({
+  const report = {
     benchmark: 'JBrancher local learning replay on SWE-bench Lite bug prompts',
     source: { url: fixture.sourceUrl, instances: fixture.instances.length, repetitions, warmupAttempts, retrievedAt: fixture.retrievedAt },
     caveat: 'Routing-efficiency replay using real SWE-bench problem statements and deterministic read traces; not an official SWE-bench patch-resolution score and does not run the Docker harness.',
@@ -243,7 +243,17 @@ try {
     verifiedHarness: verifiedWorkflow,
     pathTemplate,
     rows
-  }, null, 2));
+  };
+  if (process.argv.includes('--assert')) {
+    const failures = [];
+    if (report.learned.routeCoverage !== 1) failures.push('Pi held-out route coverage is below 100%');
+    if (report.learned.frontierCallReduction <= 0) failures.push('Pi frontier calls did not decrease');
+    if (report.genericHarness.routeCoverage !== 1) failures.push('generic held-out route coverage is below 100%');
+    if (report.genericHarness.actorCallReduction <= 0) failures.push('generic actor calls did not decrease');
+    if (report.pathTemplate.unseenPathHandled !== true) failures.push('path template did not handle an unseen path');
+    if (failures.length) throw new Error(`Learning benchmark assertions failed: ${failures.join('; ')}`);
+  }
+  console.log(JSON.stringify(report, null, 2));
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

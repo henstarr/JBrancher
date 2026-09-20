@@ -457,6 +457,15 @@ Start with the reproducible offline routing benchmark:
 npm run bench:offline
 ```
 
+CI uses `--assert` with the offline, token, and local-learning benchmarks so a
+regression in accuracy, held-out coverage, or measured savings fails loudly:
+
+```sh
+npm run bench:offline -- --assert
+npm run bench:tokens -- --assert
+npm run bench:learning -- --assert
+```
+
 It compares actor-only, rules-plus-actor, and rules-plus-Jev-plus-actor on a fixed fixture. This measures decision accuracy, actor calls avoided, fallback coverage, and evaluator calls without making paid requests. It is a wiring and regression benchmark, not evidence that Jev improves every task.
 
 For end-to-end evidence, use the same agent, model, task set, Docker image, timeout, and retry budget in paired runs. The recommended progression is:

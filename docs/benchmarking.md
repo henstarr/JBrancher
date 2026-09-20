@@ -14,6 +14,17 @@ npm ci
 npm run bench:offline
 ```
 
+Use `--assert` for the same regression gates used by CI:
+
+```sh
+npm run bench:offline -- --assert
+npm run bench:tokens -- --assert
+npm run bench:learning -- --assert
+```
+
+These assertions require perfect fixture decision/holdout coverage and a
+positive measured reduction in actor/frontier calls or context tokens.
+
 To save a machine-readable report:
 
 ```sh
