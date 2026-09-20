@@ -553,6 +553,10 @@ The helper is Harbor-compatible but does not import Harbor, so it remains
 usable in any Python harness and is straightforward to call from Harbor's
 `BaseAgent.run()` method.
 
+Each recorded tool call includes the current state and compact routing metadata
+(`source`, `routeResolution`, candidate count, and route ID when present), so
+the local dataset preserves the reason a workflow was learned or replayed.
+
 ## Use in a harness
 
 ```js

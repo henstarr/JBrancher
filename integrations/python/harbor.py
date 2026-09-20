@@ -51,7 +51,12 @@ def _result_ok(result: Any, verified: bool | None) -> bool:
     return True
 
 
-def _tool_call(action: dict[str, Any], result: Any, ok: bool) -> dict[str, Any]:
+def _tool_call(
+    action: dict[str, Any],
+    result: Any,
+    ok: bool,
+    context: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     call: dict[str, Any] = {
         "tool_name": action["tool"],
         "input": action["args"],
@@ -64,7 +69,30 @@ def _tool_call(action: dict[str, Any], result: Any, ok: bool) -> dict[str, Any]:
             call["content"] = result["content"]
     elif result is not None:
         call["output"] = result
+    if context is not None:
+        call["context"] = dict(context)
     return call
+
+
+def _episode_metadata(
+    metadata: Mapping[str, Any] | None,
+    state: Any,
+    decision: Mapping[str, Any],
+    *,
+    recovery: bool = False,
+) -> dict[str, Any]:
+    routing = {
+        "source": decision.get("source"),
+        "routeResolution": decision.get("routeResolution"),
+        "candidateCount": len(decision.get("candidates", []))
+        if isinstance(decision.get("candidates"), list)
+        else 0,
+    }
+    if isinstance(decision.get("routeId"), str):
+        routing["routeId"] = decision["routeId"]
+    if recovery:
+        routing["recovery"] = True
+    return {**(metadata or {}), "state": state, "routing": routing}
 
 
 @dataclass(frozen=True)
@@ -116,8 +144,9 @@ class JBrancherHarborLoop:
         metadata: Mapping[str, Any] | None = None,
         finish_metadata: Mapping[str, Any] | None = None,
         failure_reason: str | None = None,
+        context: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
-        calls = [] if action is None else [_tool_call(action, result, outcome == "success")]
+        calls = [] if action is None else [_tool_call(action, result, outcome == "success", context)]
         return await asyncio.to_thread(
             self.proxy.record_episode,
             task,
@@ -174,8 +203,9 @@ class JBrancherHarborLoop:
                 result=None,
                 outcome="unknown",
                 route_resolution=decision.get("routeResolution", "unmatched"),
-                metadata=metadata,
+                metadata=_episode_metadata(metadata, state, decision),
                 finish_metadata=finish_metadata,
+                context={"state": state, "routing": _episode_metadata({}, state, decision)["routing"]},
             )
             return JBrancherStepResult(decision, None, "abstain", None, None, episode)
 
@@ -189,9 +219,10 @@ class JBrancherHarborLoop:
             outcome="success" if ok else "failure",
             route_resolution="learned" if learned and ok else "failed" if learned else decision.get("routeResolution", "unmatched"),
             route_id=decision.get("routeId") if learned else None,
-            metadata=metadata,
+            metadata=_episode_metadata(metadata, state, decision),
             finish_metadata=finish_metadata,
             failure_reason=None if ok else "Harness execution or postcondition failed",
+            context={"state": state, "routing": _episode_metadata({}, state, decision)["routing"]},
         )
         if not learned or ok:
             return JBrancherStepResult(decision, action, "learned" if learned else "frontier", result, verified, episode)
@@ -214,9 +245,10 @@ class JBrancherHarborLoop:
             result=recovery_result,
             outcome="success" if recovery_ok else "failure",
             route_resolution="unmatched",
-            metadata={**(metadata or {}), "recovery": True},
+            metadata=_episode_metadata(metadata, state, recovery_decision, recovery=True),
             finish_metadata=finish_metadata,
             failure_reason=None if recovery_ok else "Frontier recovery failed",
+            context={"state": state, "routing": _episode_metadata({}, state, recovery_decision, recovery=True)["routing"]},
         )
         return JBrancherStepResult(
             recovery_decision,

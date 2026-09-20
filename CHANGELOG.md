@@ -42,6 +42,8 @@
   instances by default; smaller runs remain available with `--instances`.
 - Add an explicit live Hugging Face provenance check for fixture instance IDs
   and `FAIL_TO_PASS` values.
+- Preserve bounded state and routing context in Python harness episodes so
+  future local route mining can distinguish why an action was selected.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

@@ -74,6 +74,7 @@ async def run_harness_loop():
             execute=execute,
         )
         assert result.source == "frontier", result
+        assert result.episode["trace"]["toolCalls"][0]["context"]["routing"]["source"] == "abstain", result
     result = await loop.step(
         "Inspect README.md",
         {"ready": True},
@@ -82,6 +83,7 @@ async def run_harness_loop():
         execute=execute,
     )
     assert result.source == "learned", result
+    assert result.episode["trace"]["toolCalls"][0]["context"]["routing"]["source"] == "learned", result
     assert len(frontier_calls) == 2, frontier_calls
 
 asyncio.run(run_harness_loop())
