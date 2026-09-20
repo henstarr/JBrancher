@@ -67,6 +67,35 @@ test('a single successful fallback becomes a candidate before promotion evidence
   }
 });
 
+test('local learning stores serialize concurrent route mutations across store instances', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-lock-'));
+  try {
+    const firstStore = createLocalLearningStore({ directory });
+    const secondStore = createLocalLearningStore({ directory });
+    await firstStore.writeRoutes([
+      { id: 'route-a', status: 'candidate', safety: 'read-only' },
+      { id: 'route-b', status: 'candidate', safety: 'read-only' }
+    ]);
+
+    await Promise.all([
+      firstStore.promote('route-a'),
+      secondStore.promote('route-b')
+    ]);
+    let routes = await firstStore.readRoutes();
+    assert.deepEqual(routes.map(route => route.status), ['active', 'active']);
+
+    await Promise.all([
+      firstStore.recordRouteFailure('route-a', { reason: 'first failure' }),
+      secondStore.recordRouteFailure('route-b', { reason: 'second failure' })
+    ]);
+    routes = await firstStore.readRoutes();
+    assert.deepEqual(routes.map(route => route.status), ['quarantined', 'quarantined']);
+    assert.deepEqual(routes.map(route => route.failures), [1, 1]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('learning can replay a repeated read-only workflow with multiple steps', async () => {
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-'));
   try {

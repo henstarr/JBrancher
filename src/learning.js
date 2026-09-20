@@ -1,6 +1,6 @@
-import { appendFile, mkdir, readFile as readTextFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFile, mkdir, open, readFile as readTextFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
 const SECRET_KEY = /(api[_-]?key|token|password|secret|authorization|cookie)/i;
 const SECRET_VALUE = /(Bearer\s+)[A-Za-z0-9._~+/=-]+|(?:sk|key|apikey)[_-][A-Za-z0-9_-]{16,}/gi;
@@ -510,22 +510,79 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
   const tracesPath = join(directory, traceFile);
   const routesPath = join(directory, routeFile);
   const datasetPath = join(directory, datasetFile);
+  const lockPath = join(directory, '.learning.lock');
+  const lockWaitTimeoutMs = 30_000;
+  const lockStaleAfterMs = 10 * 60_000;
+  const lockRetryDelayMs = 25;
 
   async function ensure() { await mkdir(directory, { recursive: true }); }
 
-  async function appendDatasetExample(trace) {
+  async function acquireLock() {
+    await ensure();
+    const startedAt = Date.now();
+    while (true) {
+      try {
+        const handle = await open(lockPath, 'wx');
+        try {
+          await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
+        } finally {
+          await handle.close();
+        }
+        return async () => {
+          await unlink(lockPath).catch(error => {
+            if (error?.code !== 'ENOENT') throw error;
+          });
+        };
+      } catch (error) {
+        if (error?.code !== 'EEXIST') throw error;
+        try {
+          const lockInfo = await stat(lockPath);
+          if (Date.now() - lockInfo.mtimeMs > lockStaleAfterMs) {
+            await unlink(lockPath).catch(staleError => {
+              if (!['ENOENT', 'EACCES', 'EPERM'].includes(staleError?.code)) throw staleError;
+            });
+            continue;
+          }
+        } catch (statError) {
+          if (statError?.code !== 'ENOENT') throw statError;
+          continue;
+        }
+        if (Date.now() - startedAt >= lockWaitTimeoutMs) {
+          throw new Error(`Learning store is busy: ${directory}`);
+        }
+        await new Promise(resolve => setTimeout(resolve, lockRetryDelayMs));
+      }
+    }
+  }
+
+  async function withLock(operation) {
+    const release = await acquireLock();
+    try {
+      return await operation();
+    } finally {
+      await release();
+    }
+  }
+
+  async function appendDatasetExampleUnlocked(trace) {
     await ensure();
     const example = traceToDatasetExample(trace);
     await appendFile(datasetPath, `${JSON.stringify(example)}\n`, 'utf8');
     return example;
   }
 
+  async function appendDatasetExample(trace) {
+    return withLock(() => appendDatasetExampleUnlocked(trace));
+  }
+
   async function appendTrace(trace) {
-    await ensure();
-    const record = normalizeTrace(trace);
-    await appendFile(tracesPath, `${JSON.stringify(record)}\n`, 'utf8');
-    await appendDatasetExample(record);
-    return record;
+    return withLock(async () => {
+      await ensure();
+      const record = normalizeTrace(trace);
+      await appendFile(tracesPath, `${JSON.stringify(record)}\n`, 'utf8');
+      await appendDatasetExampleUnlocked(record);
+      return record;
+    });
   }
 
   async function readTraces() {
@@ -550,61 +607,75 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     }
   }
 
-  async function writeRoutes(routes) {
+  async function writeRoutesUnlocked(routes) {
     await ensure();
-    const tempPath = `${routesPath}.tmp-${process.pid}`;
+    const tempPath = `${routesPath}.tmp-${process.pid}-${randomUUID()}`;
     await writeFile(tempPath, `${JSON.stringify(routes, null, 2)}\n`, 'utf8');
     await rename(tempPath, routesPath);
     return routes;
   }
 
-  async function writeDataset(options = {}) {
+  async function writeRoutes(routes) {
+    return withLock(() => writeRoutesUnlocked(routes));
+  }
+
+  async function writeDatasetUnlocked(options = {}) {
     await ensure();
     const examples = buildDataset(await readTraces(), options);
-    const tempPath = `${datasetPath}.tmp-${process.pid}`;
+    const tempPath = `${datasetPath}.tmp-${process.pid}-${randomUUID()}`;
     await writeFile(tempPath, examples.map(example => JSON.stringify(example)).join('\n') + (examples.length ? '\n' : ''), 'utf8');
     await rename(tempPath, datasetPath);
     return { path: datasetPath, examples };
   }
 
+  async function writeDataset(options = {}) {
+    return withLock(() => writeDatasetUnlocked(options));
+  }
+
   async function refreshCandidates(options = {}) {
-    const existing = await readRoutes();
-    const existingById = new Map(existing.map(route => [route.id, route]));
-    const candidates = proposeRoutes(await readTraces(), options);
-    for (const candidate of candidates) {
-      const previous = existingById.get(candidate.id);
-      existingById.set(candidate.id, previous?.status === 'active' || previous?.status === 'quarantined'
-        ? { ...candidate, ...previous, status: previous.status }
-        : { ...previous, ...candidate });
-    }
-    return writeRoutes([...existingById.values()]);
+    return withLock(async () => {
+      const existing = await readRoutes();
+      const existingById = new Map(existing.map(route => [route.id, route]));
+      const candidates = proposeRoutes(await readTraces(), options);
+      for (const candidate of candidates) {
+        const previous = existingById.get(candidate.id);
+        existingById.set(candidate.id, previous?.status === 'active' || previous?.status === 'quarantined'
+          ? { ...candidate, ...previous, status: previous.status }
+          : { ...previous, ...candidate });
+      }
+      return writeRoutesUnlocked([...existingById.values()]);
+    });
   }
 
   async function promote(id, { force = false, allowVerified = false } = {}) {
-    const routes = await readRoutes();
-    const route = routes.find(item => item.id === id);
-    if (!route) throw new Error(`Unknown learned route: ${id}`);
-    if (!force && route.safety !== 'read-only'
-      && !(allowVerified && route.verified === true)) {
-      throw new Error('Only read-only or postcondition-verified routes can be promoted automatically');
-    }
-    if (!force && route.status === 'quarantined') throw new Error('Quarantined routes require explicit force to promote');
-    route.status = 'active';
-    route.promotedAt = new Date().toISOString();
-    await writeRoutes(routes);
-    return route;
+    return withLock(async () => {
+      const routes = await readRoutes();
+      const route = routes.find(item => item.id === id);
+      if (!route) throw new Error(`Unknown learned route: ${id}`);
+      if (!force && route.safety !== 'read-only'
+        && !(allowVerified && route.verified === true)) {
+        throw new Error('Only read-only or postcondition-verified routes can be promoted automatically');
+      }
+      if (!force && route.status === 'quarantined') throw new Error('Quarantined routes require explicit force to promote');
+      route.status = 'active';
+      route.promotedAt = new Date().toISOString();
+      await writeRoutesUnlocked(routes);
+      return route;
+    });
   }
 
   async function recordRouteFailure(id, { reason = '' } = {}) {
-    const routes = await readRoutes();
-    const route = routes.find(item => item.id === id);
-    if (!route) return null;
-    route.status = 'quarantined';
-    route.failures = Number.isSafeInteger(route.failures) ? route.failures + 1 : 1;
-    route.lastFailureAt = new Date().toISOString();
-    if (reason) route.failureReason = redactText(String(reason), 500);
-    await writeRoutes(routes);
-    return route;
+    return withLock(async () => {
+      const routes = await readRoutes();
+      const route = routes.find(item => item.id === id);
+      if (!route) return null;
+      route.status = 'quarantined';
+      route.failures = Number.isSafeInteger(route.failures) ? route.failures + 1 : 1;
+      route.lastFailureAt = new Date().toISOString();
+      if (reason) route.failureReason = redactText(String(reason), 500);
+      await writeRoutesUnlocked(routes);
+      return route;
+    });
   }
 
   return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote, recordRouteFailure };

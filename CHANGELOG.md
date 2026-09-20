@@ -38,6 +38,8 @@
   alongside the test suite.
 - Add benchmark `--assert` gates so coverage and efficiency regressions fail in
   local and CI runs instead of remaining informational output.
+- Serialize local learning-store mutations across concurrent harness sessions
+  with a bounded crash-recoverable lock and unique atomic temp files.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

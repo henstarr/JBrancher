@@ -148,6 +148,11 @@ offline mining can distinguish the same task under different states.
    is available for explicit manual promotion.
 6. The active route can answer the same prompt without a frontier turn.
 
+The `.jbrancher/` store can be used by more than one local harness session at
+once. Mutating operations are serialized with a bounded lock and atomic route
+and dataset replacements, so concurrent Pi processes retain both sessions'
+updates. A stale lock left by a crashed process is reclaimed automatically.
+
 If an active learned route later fails, it is marked `quarantined`, removed from
 the active route set, and the prompt falls back to Pi. This prevents a stale
 route from becoming a repeated failure loop. Re-promoting a quarantined route

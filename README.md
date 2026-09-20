@@ -172,6 +172,12 @@ stable train/validation/test split. This gives you a private, incrementally
 built dataset without an external database. Use `/jbrancher dataset` to
 regenerate it after importing or editing traces.
 
+The local store is safe to share across simultaneous harness sessions. Route
+promotion, quarantine, trace appends, and dataset rewrites use atomic files and
+a bounded local lock, so concurrent Pi/Codex/Claude runs do not silently lose
+each other's learning updates. If a process crashes, an old lock is reclaimed
+automatically; no service or external database is required.
+
 Every successful unknown episode is also mined into a `candidate` route
 immediately, so the dataset and review queue grow on the first encounter.
 Candidates are not executed automatically: read-only routes need repeated
