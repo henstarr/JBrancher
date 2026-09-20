@@ -24,6 +24,8 @@
   test for Python/Harbor-style harnesses.
 - Allow proxy callers to omit candidate actions for safe open-world abstention;
   the harness can send the frontier trajectory back for local dataset mining.
+- Make the proxy benchmark exercise and assert that open-world abstentions are
+  safe before frontier trajectories are recorded.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

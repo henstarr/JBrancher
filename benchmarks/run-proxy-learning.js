@@ -58,6 +58,13 @@ try {
     const attempts = [];
     for (let repetition = 1; repetition <= repetitions; repetition++) {
       if (repetition <= 2) {
+        const openWorldDecision = await requestJson(baseUrl, '/v1/decide', {
+          task,
+          state: { repository: instance.repo, repetition }
+        });
+        if (openWorldDecision.source !== 'abstain' || openWorldDecision.routeResolution !== 'unmatched') {
+          throw new Error(`Expected safe open-world abstention, got ${JSON.stringify(openWorldDecision)}`);
+        }
         await requestJson(baseUrl, '/v1/episodes', {
           task,
           source: 'proxy-learning-benchmark',
@@ -73,7 +80,13 @@ try {
           }],
           outcome: 'success'
         });
-        attempts.push({ repetition, source: 'frontier', correct: true });
+        attempts.push({
+          repetition,
+          source: 'frontier',
+          openWorld: true,
+          decisionSource: openWorldDecision.source,
+          correct: true
+        });
       } else {
         const decision = await requestJson(baseUrl, '/v1/decide', {
           task,
@@ -140,6 +153,7 @@ try {
     learnedReplays,
     routeCoverage: rows.every(row => row.routeCoverage),
     evaluatorCalls,
+    openWorldAbstentions: rows.reduce((total, row) => total + row.attempts.filter(attempt => attempt.openWorld).length, 0),
     recordedEpisodes: stats.episodesRecorded,
     datasetExamples: snapshot.traces,
     activeRoutes: snapshot.activeRoutes,
@@ -153,6 +167,7 @@ try {
     assert.equal(report.recordedEpisodes, instances.length * repetitions);
     assert.equal(report.datasetExamples, instances.length * repetitions);
     assert.equal(report.evaluatorCalls, 0);
+    assert.equal(report.openWorldAbstentions, instances.length * 2);
     assert.equal(report.routeCoverage, true);
     assert.equal(report.successRate, 1);
     assert.equal(report.learnedReplays, instances.length * (repetitions - 2));

@@ -87,7 +87,8 @@ npm run bench:proxy -- --assert
 It records two successful unmatched episodes per task, then sends later
 authorized decisions through `/v1/decide`. The assertion requires 100% learned
 route coverage, zero evaluator calls on replay, and a positive frontier-call
-reduction. It is a local transport/learning benchmark—not an official
+reduction. The first two attempts now call `/v1/decide` without candidates and
+assert `abstain/unmatched` before recording the frontier trajectory. It is a local transport/learning benchmark—not an official
 SWE-bench patch-resolution result.
 
 To measure actual Jev overhead and savings on the same learning path, configure
