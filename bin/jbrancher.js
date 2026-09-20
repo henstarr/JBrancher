@@ -89,15 +89,23 @@ async function liveCheck() {
 async function learn() {
   const directory = resolve(process.cwd(), flag('--dir', '.jbrancher'));
   const minimumObservations = Number(flag('--min-observations', '2'));
+  const candidateMinimumObservations = Number(flag('--candidate-min-observations', '1'));
   const minimumSimilarity = Number(flag('--min-similarity', '0.8'));
   if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
     throw new Error('Invalid --min-observations');
+  }
+  if (!Number.isSafeInteger(candidateMinimumObservations) || candidateMinimumObservations < 1) {
+    throw new Error('Invalid --candidate-min-observations');
   }
   if (!Number.isFinite(minimumSimilarity) || minimumSimilarity < 0 || minimumSimilarity > 1) {
     throw new Error('Invalid --min-similarity');
   }
   const store = createLocalLearningStore({ directory });
-  const learned = await refreshAndPromoteReadOnly(store, { minimumObservations, minimumSimilarity });
+  const learned = await refreshAndPromoteReadOnly(store, {
+    minimumObservations,
+    candidateMinimumObservations,
+    minimumSimilarity
+  });
   const traces = await store.readTraces();
   const dataset = await store.writeDataset();
   const routes = await store.readRoutes();

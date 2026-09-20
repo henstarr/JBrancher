@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText } from '../src/learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -40,6 +40,28 @@ test('local learning stores redacted traces and proposes repeated read routes', 
     });
     assert.equal(result.source, 'deterministic');
     assert.equal(result.result, 'contents of test/parser.js');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('a single successful fallback becomes a candidate before promotion evidence is complete', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-candidate-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    await store.appendTrace({
+      task: 'read README.md',
+      source: 'test',
+      outcome: 'success',
+      toolCalls: [{ toolName: 'read', input: { path: 'README.md' }, ok: true }]
+    });
+    const learned = await refreshAndPromoteReadOnly(store);
+    const routes = await store.readRoutes();
+    assert.equal(learned.promoted.length, 0);
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'candidate');
+    assert.equal(routes[0].observations, 1);
+    assert.equal((await store.writeDataset()).examples.length, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

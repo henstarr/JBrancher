@@ -134,6 +134,29 @@ test('generic brancher records unknown actor fallback episodes in a local store'
   }
 });
 
+test('generic runtime exposes a first fallback as a candidate without activating it', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-candidate-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const brancher = createJBrancher({
+      getCandidates: async () => [{ tool: 'read', args: { path: 'README.md' } }],
+      actor: async () => ({ action: { tool: 'read', args: { path: 'README.md' } } }),
+      execute: async () => 'ok',
+      learningStore: store
+    });
+    await brancher.step({ task: 'Read README.md' });
+    const routes = await store.readRoutes();
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'candidate');
+    const second = await brancher.step({ task: 'Read README.md' });
+    assert.equal(second.decision.source, 'actor');
+    const third = await brancher.step({ task: 'Read README.md' });
+    assert.equal(third.decision.source, 'learned');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic brancher lets the harness veto promotion when a postcondition is not met', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-outcome-'));
   try {

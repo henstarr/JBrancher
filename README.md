@@ -156,12 +156,12 @@ JBRANCHER_PI_MODE=learning pi -e .
 ```
 
 Traces and route candidates stay in the project-local, ignored `.jbrancher/`
-directory. JBrancher records redacted tool observations, proposes routes after
-repeated successful traces, and automatically promotes only exact read-only
+directory. JBrancher records redacted tool observations, proposes a candidate
+on the first successful fallback, and automatically promotes only exact read-only
 or conservatively generalized read-only routes:
 
 ```text
-frontier fallback → redacted local trace → repeated candidate → promotion → fast path
+frontier fallback → redacted dataset row → candidate on first success → repeated evidence → fast path
 ```
 
 There is no “unknown route” error. A prompt with no registered match simply
@@ -171,6 +171,14 @@ the task, ordered tool calls, bounded outputs, outcome, safety label, and a
 stable train/validation/test split. This gives you a private, incrementally
 built dataset without an external database. Use `/jbrancher dataset` to
 regenerate it after importing or editing traces.
+
+Every successful unknown episode is also mined into a `candidate` route
+immediately, so the dataset and review queue grow on the first encounter.
+Candidates are not executed automatically: read-only routes need repeated
+successful evidence (two observations by default), and the harness's own
+postcondition can veto promotion. Writes, deletes, deployments, and unknown
+shell commands remain dataset evidence and fallback work until you explicitly
+review and register them.
 
 After observing two successful reads of different explicitly named project
 files, JBrancher may also learn a guarded path template and handle a new safe
@@ -243,8 +251,11 @@ const brancher = createJBrancher({
 The harness still authorizes every action: a learned action is used only when
 it matches the current task and is present in the candidate set returned by
 `getCandidates`. Otherwise the normal Jev/actor path runs. Learning is local,
-redacted, and advisory; set `learningAutoPromote: false` if candidates should
-always require manual promotion. Multi-step replay applies the same check at
+redacted, and advisory. The first successful fallback creates a candidate;
+set `learningCandidateMinimumObservations` to require more examples before
+mining candidates, or set `learningAutoPromote: false` if candidates should
+always require manual promotion. `learningMinimumObservations` controls
+repeated evidence required for automatic promotion. Multi-step replay applies the same check at
 every step and abandons the learned workflow before execution if any step is
 no longer legal. `learningOutcome` is optional; when supplied, it is the
 harness-owned postcondition that decides whether an episode is eligible for
@@ -300,10 +311,13 @@ npx jbrancher demo
 npx jbrancher doctor
 npx jbrancher demo
 npx jbrancher learn --dir .jbrancher
+# Optional: require three examples before automatic promotion
+npx jbrancher learn --dir .jbrancher --min-observations 3
 ```
 
 `jbrancher learn` is offline: it mines the local redacted traces, rewrites the
-portable `dataset.jsonl`, and promotes only safe read-only candidates. It never
+portable `dataset.jsonl`, exposes first-observation candidates, and promotes
+only safe read-only candidates after the configured repeated evidence. It never
 needs the TypeSafe key or an external database.
 
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:

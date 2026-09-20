@@ -50,6 +50,7 @@ export function createJBrancher({
   learningOnlyFallback = true,
   learningAutoPromote = true,
   learningMinimumObservations = 2,
+  learningCandidateMinimumObservations = 1,
   learningMinimumSimilarity = 0.8,
   learningOutcome
 } = {}) {
@@ -73,6 +74,9 @@ export function createJBrancher({
   if (typeof learningAutoPromote !== 'boolean') throw new TypeError('learningAutoPromote must be boolean');
   if (!Number.isSafeInteger(learningMinimumObservations) || learningMinimumObservations < 1) {
     throw new TypeError('learningMinimumObservations must be a positive integer');
+  }
+  if (!Number.isSafeInteger(learningCandidateMinimumObservations) || learningCandidateMinimumObservations < 1) {
+    throw new TypeError('learningCandidateMinimumObservations must be a positive integer');
   }
   if (!Number.isFinite(learningMinimumSimilarity) || learningMinimumSimilarity < 0 || learningMinimumSimilarity > 1) {
     throw new TypeError('Invalid learningMinimumSimilarity');
@@ -163,6 +167,7 @@ export function createJBrancher({
         && typeof learningStore?.promote === 'function') {
         await refreshAndPromoteReadOnly(learningStore, {
           minimumObservations: learningMinimumObservations,
+          candidateMinimumObservations: learningCandidateMinimumObservations,
           minimumSimilarity: learningMinimumSimilarity
         });
       }
@@ -306,6 +311,7 @@ export function createJBrancher({
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
     learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
+    learningMinimumObservations, learningCandidateMinimumObservations,
     learningOutcomeValidation: Boolean(learningOutcome)
   } };
 }

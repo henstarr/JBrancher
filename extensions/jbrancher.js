@@ -240,13 +240,27 @@ export default async function jbrancherPiExtension(pi) {
     if (!learning?.enabled || !pending) return;
     const mode = ctx.mode;
     const cwd = pending.cwd;
-    const outcome = pending.toolCalls.length > 0 && pending.toolCalls.every(call => call.ok === true)
+    let outcome = pending.toolCalls.length > 0 && pending.toolCalls.every(call => call.ok === true)
       ? 'success' : 'unknown';
     try {
+      if (typeof config.learningOutcome === 'function') {
+        const validated = await config.learningOutcome({
+          task: pending.task,
+          cwd,
+          toolCalls: pending.toolCalls,
+          mode,
+          event: _event,
+          context: ctx
+        });
+        if (validated === true) outcome = 'success';
+        else if (validated === false) outcome = 'unknown';
+        else if (validated === 'success' || validated === 'unknown' || validated === 'failure') outcome = validated;
+      }
       await pending.finish({ outcome, metadata: { mode } });
       if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
         const learned = await refreshAndPromoteReadOnly(learning.store, {
           minimumObservations: Number(config.minimumObservations || 2),
+          candidateMinimumObservations: Number(config.candidateMinimumObservations || 1),
           minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
         if (learned.promoted.length > 0) {
@@ -281,7 +295,7 @@ export default async function jbrancherPiExtension(pi) {
           return;
         }
         const learned = await runtime.learning.store.refreshCandidates({
-          minimumObservations: Number(config.minimumObservations || 2),
+          minimumObservations: Number(config.candidateMinimumObservations || 1),
           minimumSimilarity: Number(config.minimumSimilarity || 0.8)
         });
         const candidates = learned.filter(route => route.status === 'candidate');

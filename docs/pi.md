@@ -138,8 +138,9 @@ The local loop is deliberately conservative:
 3. `/jbrancher dataset` regenerates `.jbrancher/dataset.jsonl`; examples are
    redacted, labeled with outcome and safety, and assigned stable train,
    validation, or test splits.
-4. `/jbrancher candidates` mines repeated successful workflows with the same
-   normalized task and action sequence.
+4. `/jbrancher candidates` mines successful workflows. The first successful
+   unknown episode becomes a reviewable candidate immediately; repeated
+   evidence is still required before automatic promotion.
 5. Repeated read-only candidates are promoted automatically; `/jbrancher promote <id>`
    is available for explicit manual promotion.
 6. The active route can answer the same prompt without a frontier turn.
@@ -161,6 +162,28 @@ arbitrary shell commands. The trace store is local and ignored by Git, so users
 can delete `.jbrancher/` to reset learning. Set
 `autoPromoteReadOnly: false` in `jbrancher.config.js` if you want every
 candidate to require manual promotion.
+
+For workflows where successful tool calls are not enough to prove completion,
+provide the same postcondition used by the project harness:
+
+```js
+export default {
+  candidateMinimumObservations: 1,
+  minimumObservations: 2,
+  learningOutcome: ({ toolCalls }) =>
+    toolCalls.length > 0 && toolCalls.every(call => call.ok === true)
+};
+```
+
+The hook may return `true`/`false` or `success`/`unknown`/`failure`. Only a
+`success` result is eligible for automatic promotion; the trace is still
+retained locally when the hook rejects it.
+
+`candidateMinimumObservations` defaults to `1`, which makes the first
+successful unknown episode visible for review. `minimumObservations` defaults
+to `2`, which keeps automatic promotion conservative. Increase either value
+for a noisier project, or set `autoPromoteReadOnly: false` to make promotion
+fully manual.
 
 When two successful traces read different explicitly named project files,
 JBrancher can also promote a guarded path template. A later request such as
@@ -213,8 +236,9 @@ The same local store can be mined outside a running Pi session:
 npx jbrancher learn --dir .jbrancher
 ```
 
-This command needs no API key. It rewrites the redacted dataset and promotes
-only safe read-only candidates; use `--min-observations` and
+This command needs no API key. It rewrites the redacted dataset, exposes
+first-observation candidates, and promotes only safe read-only candidates; use
+`--min-observations` and
 `--min-similarity` to make promotion more conservative.
 
 It uses three real SWE-bench Lite bug statements and deterministic read traces

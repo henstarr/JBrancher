@@ -572,11 +572,24 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
   return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote, recordRouteFailure };
 }
 
-export async function refreshAndPromoteReadOnly(store, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
+export async function refreshAndPromoteReadOnly(store, {
+  minimumObservations = 2,
+  candidateMinimumObservations = 1,
+  minimumSimilarity = 0.8
+} = {}) {
   if (!store || typeof store.refreshCandidates !== 'function' || typeof store.promote !== 'function') {
     throw new TypeError('A complete learning store is required');
   }
-  const routes = await store.refreshCandidates({ minimumObservations, minimumSimilarity });
+  if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
+    throw new TypeError('minimumObservations must be a positive integer');
+  }
+  if (!Number.isSafeInteger(candidateMinimumObservations) || candidateMinimumObservations < 1) {
+    throw new TypeError('candidateMinimumObservations must be a positive integer');
+  }
+  const routes = await store.refreshCandidates({
+    minimumObservations: candidateMinimumObservations,
+    minimumSimilarity
+  });
   const promotable = routes.filter(route => route.status === 'candidate'
     && route.safety === 'read-only'
     && route.observations >= minimumObservations);

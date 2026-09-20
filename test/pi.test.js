@@ -134,6 +134,79 @@ test('Pi learning mode records fallback tool use and auto-promotes repeated safe
   }
 });
 
+test('Pi learning mode mines an unknown successful route immediately as a candidate', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-candidate-test-'));
+  const handlers = new Map();
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage() {},
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    await handlers.get('input')({ text: 'read README.md', source: 'interactive' }, ctx);
+    await handlers.get('tool_call')({ toolCallId: 'one', toolName: 'read', input: { path: 'README.md' } }, ctx);
+    await handlers.get('tool_result')({ toolCallId: 'one', isError: false, content: [{ type: 'text', text: 'ok' }] }, ctx);
+    await handlers.get('agent_end')({}, ctx);
+    const routes = JSON.parse(await readFile(join(directory, '.jbrancher', 'routes.json'), 'utf8'));
+    const dataset = await readFile(join(directory, '.jbrancher', 'dataset.jsonl'), 'utf8');
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'candidate');
+    assert.equal(dataset.trim().split(/\r?\n/).length, 1);
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Pi learning outcome validation can veto promotion after tool success', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-outcome-test-'));
+  await writeFile(join(directory, 'jbrancher.config.js'), 'export default { learningOutcome: () => false };\n', 'utf8');
+  const store = createLocalLearningStore({ directory: join(directory, '.jbrancher') });
+  const handlers = new Map();
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage() {},
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    for (const id of ['one', 'two']) {
+      await handlers.get('input')({ text: 'read package.json', source: 'interactive' }, ctx);
+      await handlers.get('tool_call')({ toolCallId: id, toolName: 'read', input: { path: 'package.json' } }, ctx);
+      await handlers.get('tool_result')({ toolCallId: id, isError: false, content: [{ type: 'text', text: 'ok' }] }, ctx);
+      await handlers.get('agent_end')({}, ctx);
+    }
+    assert.equal((await store.readTraces()).every(trace => trace.outcome === 'unknown'), true);
+    assert.equal((await store.readRoutes()).some(route => route.status === 'active'), false);
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Pi learning mode promotes a path template and handles a new file request', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-path-learning-test-'));
   await writeFile(join(directory, 'src-index.js'), 'export default true;\n', 'utf8');
