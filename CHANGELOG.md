@@ -29,6 +29,8 @@
 - Record generic no-tool fallback episodes as non-reusable dataset evidence and
   assign dataset splits from stable task/action fingerprints for reliable
   holdout evaluation across repeated runs.
+- Add `jbrancher dataset` for exporting and inspecting local fallback episodes
+  without changing learned-route status.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,

@@ -198,6 +198,15 @@ npm run bench:learning
 The benchmark uses real SWE-bench problem statements to measure routing reuse;
 it is not an official SWE-bench patch-resolution result.
 
+For a generic harness or offline inspection, export the same local dataset
+without changing route status:
+
+```sh
+npx jbrancher dataset --dir .jbrancher
+# Omit rejected/unknown episodes when needed:
+npx jbrancher dataset --dir .jbrancher --success-only
+```
+
 ### Wrap your own harness
 
 Install JBrancher directly from GitHub:

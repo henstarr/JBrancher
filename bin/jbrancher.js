@@ -26,7 +26,7 @@ function loadDotEnv(file = resolve(process.cwd(), '.env')) {
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
-  console.log(`JBrancher\n\nCommands:\n  demo        Run the offline demo\n  doctor      Check local runtime and credential configuration\n  learn       Mine local traces and refresh safe learned routes\n  proxy       Start the language-agnostic decision service\n  live-check  Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher learn [--dir .jbrancher]\n  Writes a redacted dataset and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only]\n  Writes dataset.jsonl without changing route status.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
 }
 
 function flag(name, fallback) {
@@ -122,6 +122,28 @@ async function learn() {
   }, null, 2));
 }
 
+async function dataset() {
+  const directory = resolve(process.cwd(), flag('--dir', '.jbrancher'));
+  const includeUnknown = !process.argv.includes('--success-only');
+  const store = createLocalLearningStore({ directory });
+  const traces = await store.readTraces();
+  const exported = await store.writeDataset({ includeUnknown });
+  const outcomes = traces.reduce((counts, trace) => {
+    const outcome = trace.outcome || 'unknown';
+    counts[outcome] = (counts[outcome] || 0) + 1;
+    return counts;
+  }, {});
+  console.log(JSON.stringify({
+    directory,
+    traces: traces.length,
+    datasetExamples: exported.examples.length,
+    reusableExamples: exported.examples.filter(example => example.reusable).length,
+    outcomes,
+    datasetPath: exported.path,
+    routesPath: store.routesPath
+  }, null, 2));
+}
+
 async function main() {
   const command = process.argv[2] ?? 'help';
   if (command === 'help' || command === '--help' || command === '-h') return printHelp();
@@ -143,6 +165,7 @@ async function main() {
     return;
   }
   if (command === 'learn') return learn();
+  if (command === 'dataset') return dataset();
   if (command === 'proxy') return proxy();
   if (command === 'live-check') return liveCheck();
   throw new Error(`Unknown command: ${command}`);
