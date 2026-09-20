@@ -100,8 +100,8 @@ test('generic brancher records unknown actor fallback episodes in a local store'
       learningSource: 'custom-harness',
       learningCwd: directory
     });
-    const first = await brancher.step({ task: 'Read README.md' });
-    const second = await brancher.step({ task: 'Read README.md' });
+    const first = await brancher.step({ task: 'Read README.md', state: { phase: 0 } });
+    const second = await brancher.step({ task: 'Read README.md', state: { phase: 0 } });
     assert.equal(first.decision.source, 'actor');
     assert.equal(second.decision.source, 'actor');
     assert.equal(actorCalls, 2);
@@ -111,6 +111,7 @@ test('generic brancher records unknown actor fallback episodes in a local store'
     assert.equal(traces[0].outcome, 'success');
     assert.equal(traces[0].toolCalls[0].toolName, 'read');
     assert.equal(traces[0].toolCalls[0].output, 'contents of README.md');
+    assert.equal(traces[0].metadata.initialState.phase, 0);
     const routes = await store.readRoutes();
     assert.equal(routes.length, 1);
     assert.equal(routes[0].status, 'active');

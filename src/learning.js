@@ -87,6 +87,17 @@ function actionKey(toolName, input) {
   return JSON.stringify(stable({ toolName, input: redactValue(input) }));
 }
 
+function safeInspectionCommand(command) {
+  if (typeof command !== 'string' || command.length > 800) return false;
+  if (/[;&|$><\x60\r\n]/.test(command)) return false;
+  if (/(^|[\s/'\x60])(?:[A-Za-z]:[\\/]|[\\/]{1,2}|\.\.(?:[\\/]|$))/.test(command)) return false;
+  if (/(^|[\s/'\x60])(?:\.env(?:\b|[./])|credentials?(?:\b|[./])|secrets?(?:\b|[./])|[^\s/'\x60]+\.(?:pem|key|p12|pfx))(?:$|[\s/'\x60])/i.test(command)) {
+    return false;
+  }
+  if (/(^|\s)(?:-i|--in-place|--follow-symlinks)(?:\s|$)/.test(command)) return false;
+  return /^(?:ls|find|rg|grep|cat|head|tail|sed)(?:\s|$)/.test(command);
+}
+
 export function classifyActionSafety(toolName, input = {}) {
   if (toolName === 'read' && typeof input.path === 'string') {
     return safeRelativeReadPath(input.path) ? 'read-only' : 'side-effect-or-unknown';
@@ -97,6 +108,7 @@ export function classifyActionSafety(toolName, input = {}) {
     if (/^(git\s+(status(?:\s+--short)?|branch(?:\s+--show-current)?|log(?:\s+--oneline)?|diff(?:\s+--stat)?|rev-parse\s+--show-toplevel)|pwd|node\s+--version)$/.test(command)) {
       return 'read-only';
     }
+    if (safeInspectionCommand(command)) return 'read-only';
     if (/^(npm\s+test|pytest(?:\s|$)|python\s+-m\s+pytest(?:\s|$))/.test(command)) return 'verification';
   }
   return 'side-effect-or-unknown';
@@ -383,6 +395,7 @@ export function traceToDatasetExample(trace) {
     task,
     taskNormalized: trace.taskNormalized || normalizeTask(task),
     steps: toolCalls,
+    context: redactValue(trace.metadata || {}),
     outcome: trace.outcome || 'unknown',
     safety,
     reusable: trace.outcome === 'success' && safety === 'read-only',

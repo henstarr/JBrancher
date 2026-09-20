@@ -52,6 +52,7 @@ export function createJBrancher({
   learningMinimumObservations = 2,
   learningCandidateMinimumObservations = 1,
   learningMinimumSimilarity = 0.8,
+  learningMetadata = {},
   learningOutcome
 } = {}) {
   if (!Array.isArray(rules) || rules.some(rule => typeof rule !== 'function')) throw new TypeError('rules must be functions');
@@ -80,6 +81,9 @@ export function createJBrancher({
   }
   if (!Number.isFinite(learningMinimumSimilarity) || learningMinimumSimilarity < 0 || learningMinimumSimilarity > 1) {
     throw new TypeError('Invalid learningMinimumSimilarity');
+  }
+  if (!learningMetadata || typeof learningMetadata !== 'object' || Array.isArray(learningMetadata)) {
+    throw new TypeError('learningMetadata must be an object');
   }
   if (learningOutcome !== undefined && typeof learningOutcome !== 'function') {
     throw new TypeError('learningOutcome must be a function');
@@ -222,7 +226,13 @@ export function createJBrancher({
 
   async function step(input = {}) {
     const recorder = learningStore
-      ? createEpisodeRecorder({ store: learningStore, task: String(input.task ?? ''), cwd: learningCwd, source: learningSource })
+      ? createEpisodeRecorder({
+        store: learningStore,
+        task: String(input.task ?? ''),
+        cwd: learningCwd,
+        source: learningSource,
+        metadata: { ...learningMetadata, initialState: clone(input.state ?? {}) }
+      })
       : null;
     try {
       const event = await executeStep(input, recorder);
@@ -286,7 +296,13 @@ export function createJBrancher({
     let history = clone(input.history ?? []);
     const events = [];
     const recorder = learningStore
-      ? createEpisodeRecorder({ store: learningStore, task: String(input.task ?? ''), cwd: learningCwd, source: learningSource })
+      ? createEpisodeRecorder({
+        store: learningStore,
+        task: String(input.task ?? ''),
+        cwd: learningCwd,
+        source: learningSource,
+        metadata: { ...learningMetadata, initialState: clone(input.state ?? {}) }
+      })
       : null;
     try {
       const learnedRun = await replayLearnedWorkflow(input, state, history);

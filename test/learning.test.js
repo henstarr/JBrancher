@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -101,7 +101,12 @@ test('the learning recorder is harness-neutral and writes one episode dataset ro
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-'));
   try {
     const store = createLocalLearningStore({ directory });
-    const recorder = createEpisodeRecorder({ store, task: 'inspect package.json', source: 'custom-harness' });
+    const recorder = createEpisodeRecorder({
+      store,
+      task: 'inspect package.json',
+      source: 'custom-harness',
+      metadata: { initialState: { path: 'src/index.js', apiKey: 'do-not-store' } }
+    });
     recorder.recordToolCall({ toolCallId: 'call-1', toolName: 'read', input: { path: 'package.json' } });
     recorder.recordToolResult({ toolCallId: 'call-1', isError: false, content: [{ type: 'text', text: 'package contents' }] });
     const saved = await recorder.finish();
@@ -109,9 +114,39 @@ test('the learning recorder is harness-neutral and writes one episode dataset ro
     assert.equal(saved.outcome, 'success');
     assert.equal((await store.readTraces()).length, 1);
     assert.equal((await readFile(store.datasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
+    const [example] = (await store.writeDataset()).examples;
+    assert.equal(example.context.initialState.path, 'src/index.js');
+    assert.equal(example.context.initialState.apiKey, '[REDACTED]');
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('safe inspection commands can be learned while shell escapes and sensitive paths stay unsafe', () => {
+  assert.equal(classifyActionSafety('bash', { command: 'rg "TODO" src' }), 'read-only');
+  assert.equal(classifyActionSafety('bash', { command: 'cat .env' }), 'side-effect-or-unknown');
+  assert.equal(classifyActionSafety('bash', { command: 'cat ../secrets.txt' }), 'side-effect-or-unknown');
+  assert.equal(classifyActionSafety('bash', { command: 'rg TODO src && rm -rf build' }), 'side-effect-or-unknown');
+});
+
+test('learned inspection commands replay through the Pi executor', async () => {
+  const traces = [
+    { task: 'inspect TODO markers', outcome: 'success', toolCalls: [{ toolName: 'bash', input: { command: 'rg "TODO" src' }, ok: true }] },
+    { task: 'inspect TODO markers', outcome: 'success', toolCalls: [{ toolName: 'bash', input: { command: 'rg "TODO" src' }, ok: true }] }
+  ];
+  const [candidate] = proposeRoutes(traces);
+  candidate.status = 'active';
+  const router = createPiRouter({ routes: createLearnedRoutes([candidate]) });
+  const result = await router.handle({
+    task: 'inspect TODO markers',
+    exec: async (program, args) => {
+      assert.equal(program, 'bash');
+      assert.deepEqual(args, ['-lc', 'rg "TODO" src']);
+      return { code: 0, stdout: 'src/app.js:1:TODO', stderr: '' };
+    }
+  });
+  assert.equal(result.source, 'deterministic');
+  assert.equal(result.result, 'src/app.js:1:TODO');
 });
 
 test('learning generalizes repeated read workflows across conservative paraphrases', async () => {

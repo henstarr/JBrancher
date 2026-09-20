@@ -136,8 +136,10 @@ The local loop is deliberately conservative:
    tool outcomes. This is the dataset-building path for routes that are not
    registered ahead of time.
 3. `/jbrancher dataset` regenerates `.jbrancher/dataset.jsonl`; examples are
-   redacted, labeled with outcome and safety, and assigned stable train,
-   validation, or test splits.
+redacted, labeled with outcome and safety, and assigned stable train,
+validation, or test splits. Dataset rows also retain redacted harness context
+metadata, such as the initial state supplied by a generic runtime, so future
+offline mining can distinguish the same task under different states.
 4. `/jbrancher candidates` mines successful workflows. The first successful
    unknown episode becomes a reviewable candidate immediately; repeated
    evidence is still required before automatic promotion.
@@ -152,8 +154,11 @@ requires an explicit `force` call through the learning API after the underlying
 problem has been reviewed.
 
 Learned routes currently support exact normalized prompts and conservative
-token-similarity matches for one or more repeated `read` actions, plus a small
-allowlist of read-only `bash` commands. Similarity generalization requires
+token-similarity matches for one or more repeated `read` actions, plus a
+bounded allowlist of read-only inspection commands such as `rg`, `grep`,
+`cat`, `head`, `tail`, and `sed`. Shell control operators, traversal,
+absolute paths, in-place flags, and common secret files are rejected.
+Similarity generalization requires
 repeated evidence for each observed phrasing and defaults to a similarity score
 of 0.8; tune it with `minimumSimilarity` when configuring a project. Other
 actions remain in the dataset but are candidate or fallback-only; this
