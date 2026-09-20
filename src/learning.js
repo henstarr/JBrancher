@@ -180,8 +180,13 @@ async function executeAction(action, { exec, readFile }) {
   throw new Error(`Learned action is not replayable: ${action.toolName || 'unknown'}`);
 }
 
-function routeFromRecord(record) {
-  if (record.status !== 'active') return null;
+function isLearnedRecordUsable(record, { allowVerified = false } = {}) {
+  return record?.status === 'active'
+    && (record.safety === 'read-only' || (allowVerified && record.verified === true));
+}
+
+function routeFromRecord(record, options = {}) {
+  if (!isLearnedRecordUsable(record, options)) return null;
 
   if (record.matcher?.type === 'read-path') {
     const action = record.action;
@@ -218,12 +223,12 @@ function routeFromRecord(record) {
   };
 }
 
-export function createLearnedRoutes(records = []) {
-  return records.map(routeFromRecord).filter(Boolean);
+export function createLearnedRoutes(records = [], options = {}) {
+  return records.map(record => routeFromRecord(record, options)).filter(Boolean);
 }
 
-function learnedActionFromRecord(record, task) {
-  if (record?.status !== 'active' || record.safety !== 'read-only') return null;
+function learnedActionFromRecord(record, task, options = {}) {
+  if (!isLearnedRecordUsable(record, options)) return null;
   const actions = actionsFromRecord(record);
   if (actions.length !== 1) return null;
   if (record.matcher?.type === 'read-path') {
@@ -250,30 +255,30 @@ function learnedActionFromRecord(record, task) {
  * available through createLearnedRoutes for Pi, but are not flattened into a
  * generic harness action.
  */
-export function findLearnedActions(records = [], task = '') {
+export function findLearnedActions(records = [], task = '', options = {}) {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   if (typeof task !== 'string') throw new TypeError('task must be a string');
   const matches = records.map(record => {
-    const action = learnedActionFromRecord(record, task);
+    const action = learnedActionFromRecord(record, task, options);
     return action ? { id: record.id, action } : null;
   }).filter(Boolean);
   return matches.filter((match, index) => matches.findIndex(item => actionKey(item.action.tool, item.action.args)
     === actionKey(match.action.tool, match.action.args)) === index);
 }
 
-export function createLearnedActions(records = [], task = '') {
-  return findLearnedActions(records, task).map(match => match.action);
+export function createLearnedActions(records = [], task = '', options = {}) {
+  return findLearnedActions(records, task, options).map(match => match.action);
 }
 
 /**
  * Return safe multi-step learned workflows for a generic harness.
  * The caller must authorize every returned action against its current state.
  */
-export function findLearnedWorkflows(records = [], task = '') {
+export function findLearnedWorkflows(records = [], task = '', options = {}) {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   if (typeof task !== 'string') throw new TypeError('task must be a string');
   return records.map(record => {
-    if (record?.status !== 'active' || record.safety !== 'read-only') return null;
+    if (!isLearnedRecordUsable(record, options)) return null;
     const actions = actionsFromRecord(record);
     if (actions.length < 2 || record.matcher?.type === 'read-path' || !matchesStoredMatcher(record.matcher, task)) return null;
     return {
@@ -328,6 +333,7 @@ export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilari
           matcher,
           action: actionGroup.actions.length === 1 ? actionGroup.actions[0] : { actions: actionGroup.actions },
           safety,
+          verified: selectedTraces.every(trace => trace.metadata?.postconditionValidated === true),
           observations: selectedTraces.length,
           examples: selectedTraces.slice(-5).map(trace => trace.task),
           firstSeen: selectedTraces[0].createdAt,
@@ -370,6 +376,7 @@ function proposeReadPathRoutes(traces, { minimumObservations = 2 } = {}) {
         matcher: { type: 'read-path', exactTasks, exactPaths },
         action: group.action,
         safety: 'read-only',
+        verified: group.traces.every(trace => trace.metadata?.postconditionValidated === true),
         observations: group.traces.length,
         examples: group.traces.slice(-5).map(trace => trace.task),
         firstSeen: group.traces[0].createdAt,
@@ -559,11 +566,14 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     return writeRoutes([...existingById.values()]);
   }
 
-  async function promote(id, { force = false } = {}) {
+  async function promote(id, { force = false, allowVerified = false } = {}) {
     const routes = await readRoutes();
     const route = routes.find(item => item.id === id);
     if (!route) throw new Error(`Unknown learned route: ${id}`);
-    if (!force && route.safety !== 'read-only') throw new Error('Only read-only routes can be promoted automatically');
+    if (!force && route.safety !== 'read-only'
+      && !(allowVerified && route.verified === true)) {
+      throw new Error('Only read-only or postcondition-verified routes can be promoted automatically');
+    }
     if (!force && route.status === 'quarantined') throw new Error('Quarantined routes require explicit force to promote');
     route.status = 'active';
     route.promotedAt = new Date().toISOString();
@@ -589,7 +599,8 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
 export async function refreshAndPromoteReadOnly(store, {
   minimumObservations = 2,
   candidateMinimumObservations = 1,
-  minimumSimilarity = 0.8
+  minimumSimilarity = 0.8,
+  allowVerified = false
 } = {}) {
   if (!store || typeof store.refreshCandidates !== 'function' || typeof store.promote !== 'function') {
     throw new TypeError('A complete learning store is required');
@@ -605,8 +616,8 @@ export async function refreshAndPromoteReadOnly(store, {
     minimumSimilarity
   });
   const promotable = routes.filter(route => route.status === 'candidate'
-    && route.safety === 'read-only'
+    && (route.safety === 'read-only' || (allowVerified && route.verified === true))
     && route.observations >= minimumObservations);
-  for (const route of promotable) await store.promote(route.id);
+  for (const route of promotable) await store.promote(route.id, { allowVerified });
   return { routes, promoted: promotable };
 }

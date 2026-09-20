@@ -192,6 +192,11 @@ to `2`, which keeps automatic promotion conservative. Increase either value
 for a noisier project, or set `autoPromoteReadOnly: false` to make promotion
 fully manual.
 
+The generic runtime also supports an explicit
+`learningPromotionMode: 'verified'` for harnesses that own a reliable
+postcondition verifier. Pi's native extension remains read-only by default;
+use project routes for deliberate side effects.
+
 When two successful traces read different explicitly named project files,
 JBrancher can also promote a guarded path template. A later request such as
 `inspect src/index.js` can read that new relative path without a frontier turn;

@@ -53,6 +53,7 @@ export function createJBrancher({
   learningCandidateMinimumObservations = 1,
   learningMinimumSimilarity = 0.8,
   learningMetadata = {},
+  learningPromotionMode = 'safe',
   learningOutcome
 } = {}) {
   if (!Array.isArray(rules) || rules.some(rule => typeof rule !== 'function')) throw new TypeError('rules must be functions');
@@ -85,6 +86,12 @@ export function createJBrancher({
   if (!learningMetadata || typeof learningMetadata !== 'object' || Array.isArray(learningMetadata)) {
     throw new TypeError('learningMetadata must be an object');
   }
+  if (!['safe', 'verified'].includes(learningPromotionMode)) {
+    throw new TypeError('learningPromotionMode must be safe or verified');
+  }
+  if (learningPromotionMode === 'verified' && typeof learningOutcome !== 'function') {
+    throw new TypeError('learningPromotionMode=verified requires learningOutcome');
+  }
   if (learningOutcome !== undefined && typeof learningOutcome !== 'function') {
     throw new TypeError('learningOutcome must be a function');
   }
@@ -114,7 +121,9 @@ export function createJBrancher({
 
     if (learningStore && getCandidates && typeof learningStore.readRoutes === 'function' && candidates.length > 0) {
       try {
-        const learned = findLearnedActions(await learningStore.readRoutes(), task)
+        const learned = findLearnedActions(await learningStore.readRoutes(), task, {
+          allowVerified: learningPromotionMode === 'verified'
+        })
           .filter(match => candidates.some(candidate => sameAction(candidate, match.action)));
         if (learned.length === 1) {
           return { source: 'learned', action: clone(learned[0].action), routeId: learned[0].id,
@@ -172,7 +181,8 @@ export function createJBrancher({
         await refreshAndPromoteReadOnly(learningStore, {
           minimumObservations: learningMinimumObservations,
           candidateMinimumObservations: learningCandidateMinimumObservations,
-          minimumSimilarity: learningMinimumSimilarity
+          minimumSimilarity: learningMinimumSimilarity,
+          allowVerified: learningPromotionMode === 'verified'
         });
       }
       return saved;
@@ -237,7 +247,14 @@ export function createJBrancher({
     try {
       const event = await executeStep(input, recorder);
       const outcome = await validatedOutcome({ task: input.task, state: input.state, history: input.history, event, events: [event] });
-      await finishRecorder(recorder, { ...(outcome ? { outcome } : {}), metadata: { mode: 'step', decisionSource: event.decision.source } });
+      await finishRecorder(recorder, {
+        ...(outcome ? { outcome } : {}),
+        metadata: {
+          mode: 'step',
+          decisionSource: event.decision.source,
+          ...(learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
+        }
+      });
       return event;
     } catch (error) {
       await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
@@ -250,7 +267,9 @@ export function createJBrancher({
     const task = String(input.task ?? '');
     let workflows;
     try {
-      workflows = findLearnedWorkflows(await learningStore.readRoutes(), task);
+      workflows = findLearnedWorkflows(await learningStore.readRoutes(), task, {
+        allowVerified: learningPromotionMode === 'verified'
+      });
     } catch {
       return null;
     }
@@ -332,7 +351,14 @@ export function createJBrancher({
         state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
       }
       const outcome = await validatedOutcome({ task: input.task, state, history, events });
-      await finishRecorder(recorder, { ...(outcome ? { outcome } : {}), metadata: { mode: 'run', steps: events.length } });
+      await finishRecorder(recorder, {
+        ...(outcome ? { outcome } : {}),
+        metadata: {
+          mode: 'run',
+          steps: events.length,
+          ...(learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
+        }
+      });
     } catch (error) {
       await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'run', steps: events.length } }).catch(() => {});
       throw error;
@@ -343,7 +369,7 @@ export function createJBrancher({
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
     learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
-    learningMinimumObservations, learningCandidateMinimumObservations,
+    learningMinimumObservations, learningCandidateMinimumObservations, learningPromotionMode,
     learningOutcomeValidation: Boolean(learningOutcome)
   } };
 }

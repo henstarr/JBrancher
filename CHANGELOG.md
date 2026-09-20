@@ -28,6 +28,8 @@
   automatic execution still requires repeated safe evidence.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
+- Add opt-in postcondition-verified promotion for generic harness workflows,
+  plus a benchmark arm covering a repeated side-effecting action.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

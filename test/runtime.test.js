@@ -186,6 +186,37 @@ test('generic brancher lets the harness veto promotion when a postcondition is n
   }
 });
 
+test('generic runtime can opt into postcondition-verified promotion for harness-owned writes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-verified-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let actorCalls = 0;
+    const brancher = createJBrancher({
+      getCandidates: async () => [{ tool: 'write', args: { path: 'out.txt', content: 'ok' } }],
+      actor: async () => {
+        actorCalls++;
+        return { action: { tool: 'write', args: { path: 'out.txt', content: 'ok' } } };
+      },
+      execute: async () => 'written',
+      learningStore: store,
+      learningPromotionMode: 'verified',
+      learningOutcome: () => true
+    });
+    await brancher.step({ task: 'write the verified artifact' });
+    await brancher.step({ task: 'write the verified artifact' });
+    const routes = await store.readRoutes();
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].verified, true);
+    assert.equal(routes[0].safety, 'side-effect-or-unknown');
+    const learned = await brancher.step({ task: 'write the verified artifact' });
+    assert.equal(learned.decision.source, 'learned');
+    assert.equal(actorCalls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic brancher replays a learned multi-step read workflow only when each step remains allowed', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-workflow-'));
   try {

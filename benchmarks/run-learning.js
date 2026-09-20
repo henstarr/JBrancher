@@ -138,11 +138,42 @@ async function benchmarkGenericHarness(instance, store) {
   };
 }
 
+async function benchmarkVerifiedWorkflow(store) {
+  let actorCalls = 0;
+  const brancher = createJBrancher({
+    getCandidates: async () => [{ tool: 'write', args: { path: 'out.txt', content: 'verified' } }],
+    actor: async () => {
+      actorCalls++;
+      return { action: { tool: 'write', args: { path: 'out.txt', content: 'verified' } } };
+    },
+    execute: async () => ({ written: true }),
+    learningStore: store,
+    learningSource: 'verified-learning-benchmark',
+    learningPromotionMode: 'verified',
+    learningOutcome: ({ event }) => event?.result?.written === true
+  });
+  const rows = [];
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const result = await brancher.step({ task: 'apply the verified fixture update' });
+    rows.push({ attempt, source: result.decision.source, correct: result.result?.written === true });
+  }
+  return {
+    baselineActorCalls: rows.length,
+    actorCalls,
+    actorCallsAvoided: rows.length - actorCalls,
+    actorCallReduction: Number(((rows.length - actorCalls) / rows.length).toFixed(3)),
+    routeCoverage: rows.every(row => row.correct) ? 1 : 0,
+    activeVerifiedRoutes: (await store.readRoutes()).filter(route => route.status === 'active' && route.verified).length,
+    rows
+  };
+}
+
 const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-swebench-learning-'));
 try {
   const store = createLocalLearningStore({ directory: join(directory, 'swebench') });
   const pathTemplateStore = createLocalLearningStore({ directory: join(directory, 'path-template') });
   const genericStore = createLocalLearningStore({ directory: join(directory, 'generic-harness') });
+  const verifiedStore = createLocalLearningStore({ directory: join(directory, 'verified-harness') });
   const rows = [];
   const genericRows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
@@ -154,6 +185,7 @@ try {
   const genericBaselineActorCalls = genericRows.reduce((sum, row) => sum + row.baselineActorCalls, 0);
   const genericLearnedActorCalls = genericRows.reduce((sum, row) => sum + row.actorCalls, 0);
   const pathTemplate = await benchmarkPathTemplate(pathTemplateStore);
+  const verifiedWorkflow = await benchmarkVerifiedWorkflow(verifiedStore);
   console.log(JSON.stringify({
     benchmark: 'JBrancher local learning replay on SWE-bench Lite bug prompts',
     source: { url: fixture.sourceUrl, instances: fixture.instances.length, repetitions, warmupAttempts, retrievedAt: fixture.retrievedAt },
@@ -184,6 +216,7 @@ try {
       routeCoverage: genericRows.flatMap(row => row.rows).every(row => row.correct) ? 1 : 0,
       rows: genericRows
     },
+    verifiedHarness: verifiedWorkflow,
     pathTemplate,
     rows
   }, null, 2));

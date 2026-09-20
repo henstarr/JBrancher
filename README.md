@@ -261,6 +261,21 @@ no longer legal. `learningOutcome` is optional; when supplied, it is the
 harness-owned postcondition that decides whether an episode is eligible for
 promotion.
 
+The default promotion mode is `safe`: only read-only routes can become active.
+If your harness has a strong verifier and wants to learn writes or other
+side-effecting actions, opt in explicitly with
+`learningPromotionMode: 'verified'`. JBrancher then requires a successful
+`learningOutcome` result for every observation and still executes the learned
+action only when the current `getCandidates` result authorizes it:
+
+```js
+const brancher = createJBrancher({
+  // ...getCandidates, actor, execute, learningStore...
+  learningPromotionMode: 'verified',
+  learningOutcome: ({ state, events }) => harness.isComplete(state, events)
+});
+```
+
 ### Reduce context tokens before a model call
 
 For large prompts, let Jev rank optional context while code enforces a hard token budget:

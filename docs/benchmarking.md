@@ -96,6 +96,12 @@ controls do not receive different experience. Prefer supplying
 `learningOutcome` from the same verifier/postcondition used by the harness so
 tool success is not confused with task success.
 
+Keep `learningPromotionMode: 'safe'` for general-purpose agents. A harness
+may use `learningPromotionMode: 'verified'` to learn side-effecting actions,
+but only when its postcondition verifier returns success and its current
+candidate set still authorizes the replay. Treat this as a harness policy
+decision, not as a Jev confidence decision.
+
 Learned multi-step replays are sent through the same postcondition on every
 run. If it rejects a replay, JBrancher quarantines the route so the next
 attempt returns to the actor. In Pi, a route failure starts a fresh recorder

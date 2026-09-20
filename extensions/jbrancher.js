@@ -262,7 +262,13 @@ export default async function jbrancherPiExtension(pi) {
         else if (validated === false) outcome = 'unknown';
         else if (validated === 'success' || validated === 'unknown' || validated === 'failure') outcome = validated;
       }
-      await pending.finish({ outcome, metadata: { mode } });
+      await pending.finish({
+        outcome,
+        metadata: {
+          mode,
+          ...(config.learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
+        }
+      });
       if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
         const learned = await refreshAndPromoteReadOnly(learning.store, {
           minimumObservations: Number(config.minimumObservations || 2),
