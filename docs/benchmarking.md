@@ -45,6 +45,9 @@ four warm-up attempts:
 - Jev-selected route learning: eight simulated Jev decisions down to two (75%
   fewer) after two successful warm-up executions, with 100% learned-route
   coverage on the remaining repetitions.
+- Pi ambiguity preference learning: eight simulated Pi Jev decisions down to
+  two (75% fewer), with the same route remaining correct on every learned
+  replay.
 - Postcondition-verified write arm: the third repeated action uses the learned
   route after two actor warm-ups, avoiding 33.3% of actor calls in that
   three-attempt trial.

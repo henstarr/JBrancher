@@ -190,6 +190,41 @@ async function benchmarkJevLearning(instance, store) {
   };
 }
 
+async function benchmarkPiPreference(instance, store) {
+  const task = `${instance.instance_id}: ${instance.problem_statement}`;
+  const routes = [
+    { id: 'read-failing-test', match: () => true, run: async () => `fixture contents for ${instance.fail_to_pass[0]}` },
+    { id: 'read-readme', match: () => true, run: async () => 'fixture README contents' }
+  ];
+  let evaluatorCalls = 0;
+  const router = createPiRouter({
+    routes,
+    prefer: async ({ task: currentTask, matched }) =>
+      (await store.findPreference(currentTask, matched))?.routeId,
+    evaluate: async () => {
+      evaluatorCalls++;
+      return { scores: [0.96, 0.11] };
+    }
+  });
+  const rows = [];
+  for (let attempt = 1; attempt <= repetitions; attempt++) {
+    const result = await router.handle({ task });
+    if (result.source === 'jev') {
+      await store.recordPreferenceSuccess({ task, routeId: result.routeId, minimumObservations: 2 });
+    }
+    rows.push({ attempt, source: result.source, routeId: result.routeId, correct: result.result === `fixture contents for ${instance.fail_to_pass[0]}` });
+  }
+  return {
+    instance_id: instance.instance_id,
+    baselineJevCalls: repetitions,
+    jevCalls: evaluatorCalls,
+    jevCallsAvoided: repetitions - evaluatorCalls,
+    jevCallReduction: Number(((repetitions - evaluatorCalls) / repetitions).toFixed(3)),
+    routeCoverage: rows.slice(2).every(row => row.source === 'learned' && row.correct),
+    rows
+  };
+}
+
 async function benchmarkVerifiedWorkflow(store) {
   let actorCalls = 0;
   const brancher = createJBrancher({
@@ -226,12 +261,14 @@ try {
   const pathTemplateStore = createLocalLearningStore({ directory: join(directory, 'path-template') });
   const genericStore = createLocalLearningStore({ directory: join(directory, 'generic-harness') });
   const jevLearningStore = createLocalLearningStore({ directory: join(directory, 'jev-learning') });
+  const piPreferenceStore = createLocalLearningStore({ directory: join(directory, 'pi-preference') });
   const verifiedStore = createLocalLearningStore({ directory: join(directory, 'verified-harness') });
   const rows = [];
   const genericRows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
   for (const instance of fixture.instances) genericRows.push(await benchmarkGenericHarness(instance, genericStore));
   const jevLearning = await benchmarkJevLearning(fixture.instances[0], jevLearningStore);
+  const piPreference = await benchmarkPiPreference(fixture.instances[0], piPreferenceStore);
   const baselineFrontierCalls = fixture.instances.length * repetitions;
   const learnedFrontierCalls = rows.reduce((sum, row) => sum + row.frontierCalls, 0);
   const savedPromptTokens = rows.reduce((sum, row) => sum + row.savedPromptTokens, 0);
@@ -275,6 +312,7 @@ try {
       rows: genericRows
     },
     jevLearning,
+    piPreference,
     verifiedHarness: verifiedWorkflow,
     pathTemplate,
     rows
@@ -287,6 +325,8 @@ try {
     if (report.genericHarness.actorCallReduction <= 0) failures.push('generic actor calls did not decrease');
     if (report.jevLearning.routeCoverage !== true) failures.push('Jev learning route coverage is below 100%');
     if (report.jevLearning.jevCallReduction <= 0) failures.push('Jev learning did not reduce evaluator calls');
+    if (report.piPreference.routeCoverage !== true) failures.push('Pi preference route coverage is below 100%');
+    if (report.piPreference.jevCallReduction <= 0) failures.push('Pi preference learning did not reduce evaluator calls');
     if (report.pathTemplate.unseenPathHandled !== true) failures.push('path template did not handle an unseen path');
     if (failures.length) throw new Error(`Learning benchmark assertions failed: ${failures.join('; ')}`);
   }

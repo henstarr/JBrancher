@@ -98,6 +98,26 @@ multiple matches fall back to Pi. If Jev is unavailable, malformed, or
 uncertain, Pi receives the original prompt unchanged. This preserves the
 frontier model as the recovery path for open-ended and non-deterministic work.
 
+### Learn repeated Jev choices locally
+
+When the project has narrow, idempotent routes that repeatedly produce the
+same Jev choice, learning mode can remember that choice and avoid another Jev
+request after repeated successful evidence:
+
+```js
+export default {
+  learnJevChoices: true,
+  preferenceMinimumObservations: 2
+};
+```
+
+The preference is stored in the project-local `.jbrancher/preferences.json`
+file. It is used only when the same task matches the same route ID in the
+current harness-provided route set. A failed preferred route is quarantined and
+the normal Jev/frontier path resumes. Enable this only for routes whose
+repeated execution is safe; explicit route authorization and execution remain
+the harness's responsibility.
+
 ## Built-in routes
 
 The package includes conservative read-only routes for:

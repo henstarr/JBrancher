@@ -505,11 +505,12 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
   };
 }
 
-export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl', routeFile = 'routes.json', datasetFile = 'dataset.jsonl' } = {}) {
+export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl', routeFile = 'routes.json', datasetFile = 'dataset.jsonl', preferenceFile = 'preferences.json' } = {}) {
   if (typeof directory !== 'string' || !directory) throw new TypeError('A learning directory is required');
   const tracesPath = join(directory, traceFile);
   const routesPath = join(directory, routeFile);
   const datasetPath = join(directory, datasetFile);
+  const preferencesPath = join(directory, preferenceFile);
   const lockPath = join(directory, '.learning.lock');
   const lockWaitTimeoutMs = 30_000;
   const lockStaleAfterMs = 10 * 60_000;
@@ -607,6 +608,16 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     }
   }
 
+  async function readPreferences() {
+    try {
+      const parsed = JSON.parse(await readTextFile(preferencesPath, 'utf8'));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      if (error?.code === 'ENOENT') return [];
+      throw error;
+    }
+  }
+
   async function writeRoutesUnlocked(routes) {
     await ensure();
     const tempPath = `${routesPath}.tmp-${process.pid}-${randomUUID()}`;
@@ -617,6 +628,91 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
 
   async function writeRoutes(routes) {
     return withLock(() => writeRoutesUnlocked(routes));
+  }
+
+  async function writePreferencesUnlocked(preferences) {
+    await ensure();
+    const tempPath = `${preferencesPath}.tmp-${process.pid}-${randomUUID()}`;
+    await writeFile(tempPath, `${JSON.stringify(preferences, null, 2)}\n`, 'utf8');
+    await rename(tempPath, preferencesPath);
+    return preferences;
+  }
+
+  async function writePreferences(preferences) {
+    if (!Array.isArray(preferences)) throw new TypeError('preferences must be an array');
+    return withLock(() => writePreferencesUnlocked(preferences));
+  }
+
+  async function findPreference(task, routeIds = [], { minimumObservations = 2 } = {}) {
+    if (typeof task !== 'string') throw new TypeError('task must be a string');
+    if (!Array.isArray(routeIds)) throw new TypeError('routeIds must be an array');
+    if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
+      throw new TypeError('minimumObservations must be a positive integer');
+    }
+    const normalized = normalizeTask(task);
+    const allowed = new Set(routeIds.filter(routeId => typeof routeId === 'string'));
+    const preferences = await readPreferences();
+    return preferences.find(preference => preference?.status === 'active'
+      && preference.taskNormalized === normalized
+      && allowed.has(preference.routeId)
+      && Number.isSafeInteger(preference.observations)
+      && preference.observations >= minimumObservations) || null;
+  }
+
+  async function recordPreferenceSuccess({ task, routeId, minimumObservations = 2 } = {}) {
+    if (typeof task !== 'string' || typeof routeId !== 'string' || !routeId) {
+      throw new TypeError('task and routeId are required');
+    }
+    if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
+      throw new TypeError('minimumObservations must be a positive integer');
+    }
+    return withLock(async () => {
+      const taskNormalized = normalizeTask(task);
+      const id = `preference-${hash(`${taskNormalized}\n${routeId}`)}`;
+      const preferences = await readPreferences();
+      let preference = preferences.find(item => item.id === id);
+      if (!preference) {
+        preference = {
+          schemaVersion: 1,
+          id,
+          task: redactText(task, 4000),
+          taskNormalized,
+          routeId: redactText(routeId, 200),
+          status: 'candidate',
+          observations: 0,
+          failures: 0,
+          createdAt: new Date().toISOString()
+        };
+        preferences.push(preference);
+      }
+      if (preference.status !== 'quarantined') {
+        preference.observations = Number.isSafeInteger(preference.observations) ? preference.observations + 1 : 1;
+        preference.status = preference.observations >= minimumObservations ? 'active' : 'candidate';
+        preference.lastSuccessAt = new Date().toISOString();
+        if (preference.status === 'active' && !preference.promotedAt) preference.promotedAt = preference.lastSuccessAt;
+        await writePreferencesUnlocked(preferences);
+      }
+      return preference;
+    });
+  }
+
+  async function recordPreferenceFailure({ task, routeId, reason = '' } = {}) {
+    if (typeof task !== 'string' || typeof routeId !== 'string' || !routeId) {
+      throw new TypeError('task and routeId are required');
+    }
+    return withLock(async () => {
+      const taskNormalized = normalizeTask(task);
+      const id = `preference-${hash(`${taskNormalized}\n${routeId}`)}`;
+      const preferences = await readPreferences();
+      const preference = preferences.find(item => item.id === id);
+      if (!preference) return null;
+      preference.status = 'quarantined';
+      preference.failures = Number.isSafeInteger(preference.failures) ? preference.failures + 1 : 1;
+      preference.lastFailureAt = new Date().toISOString();
+      if (reason) preference.failureReason = redactText(String(reason), 500);
+      await writePreferencesUnlocked(preferences);
+      return preference;
+    });
   }
 
   async function writeDatasetUnlocked(options = {}) {
@@ -678,7 +774,13 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     });
   }
 
-  return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote, recordRouteFailure };
+  return {
+    directory, tracesPath, routesPath, datasetPath, preferencesPath,
+    appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes,
+    writeDataset, refreshCandidates, promote, recordRouteFailure,
+    readPreferences, writePreferences, findPreference, recordPreferenceSuccess,
+    recordPreferenceFailure
+  };
 }
 
 export async function refreshAndPromoteReadOnly(store, {

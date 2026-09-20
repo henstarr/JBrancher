@@ -54,6 +54,68 @@ test('Pi router uses Jev only among matched routes and falls back on provider fa
   assert.equal((await failed.decide({ task: 'choose' })).source, 'frontier');
 });
 
+test('Pi router can apply an authorized local preference before Jev', async () => {
+  let evaluated = false;
+  const router = createPiRouter({
+    routes: [
+      { id: 'a', match: () => true, run: async () => 'a' },
+      { id: 'b', match: () => true, run: async () => 'b' }
+    ],
+    prefer: async ({ task, matched }) => {
+      assert.equal(task, 'choose');
+      assert.deepEqual(matched, ['a', 'b']);
+      return 'b';
+    },
+    evaluate: async () => { evaluated = true; return { scores: [0.99, 0.01] }; }
+  });
+  const result = await router.handle({ task: 'choose' });
+  assert.equal(result.source, 'learned');
+  assert.equal(result.routeId, 'b');
+  assert.equal(result.result, 'b');
+  assert.equal(evaluated, false);
+});
+
+test('Pi extension reuses an active local Jev preference without a provider key', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-preference-test-'));
+  await writeFile(join(directory, 'jbrancher.config.js'), `export default {
+    learnJevChoices: true,
+    routes: [
+      { id: 'first', match: () => true, run: async () => 'first' },
+      { id: 'preferred', match: () => true, run: async () => 'preferred' }
+    ]
+  };\n`, 'utf8');
+  const store = createLocalLearningStore({ directory: join(directory, '.jbrancher') });
+  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', minimumObservations: 2 });
+  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', minimumObservations: 2 });
+  const handlers = new Map();
+  const messages = [];
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage(message) { messages.push(message); },
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    const result = await handlers.get('input')({ text: 'choose a route', source: 'interactive' }, ctx);
+    assert.deepEqual(result, { action: 'handled' });
+    assert.match(messages.at(-1).content, /learned.*preferred/);
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Pi route failures become a frontier fallback and results are printable', async () => {
   const router = createPiRouter({ routes: [{ id: 'broken', match: () => true, run: async () => { throw new Error('nope'); } }] });
   const result = await router.handle({ task: 'run' });

@@ -35,11 +35,12 @@ function validateThreshold(value, name) {
  * routes match, Jev may choose only among those routes. An unavailable or
  * uncertain evaluator abstains so Pi's frontier model can handle the prompt.
  */
-export function createPiRouter({ routes = [], evaluate, minimumProbability = 0.7,
+export function createPiRouter({ routes = [], evaluate, prefer, minimumProbability = 0.7,
   minimumMargin = 0.15 } = {}) {
   if (!Array.isArray(routes)) throw new TypeError('routes must be an array');
   routes.forEach(validateRoute);
   if (evaluate !== undefined && typeof evaluate !== 'function') throw new TypeError('evaluate must be a function');
+  if (prefer !== undefined && typeof prefer !== 'function') throw new TypeError('prefer must be a function');
   validateThreshold(minimumProbability, 'minimumProbability');
   validateThreshold(minimumMargin, 'minimumMargin');
 
@@ -61,6 +62,20 @@ export function createPiRouter({ routes = [], evaluate, minimumProbability = 0.7
     const matched = await findMatches({ task, state, history, signal });
     if (matched.length === 0) {
       return { source: 'frontier', action: null, routeId: null, matched: [] };
+    }
+
+    if (prefer) {
+      try {
+        const preferredId = await prefer({ task, state: clone(state), history: clone(history), signal,
+          matched: matched.map(route => route.id) });
+        const preferred = matched.find(route => route.id === preferredId);
+        if (preferred) {
+          return { source: 'learned', action: routeAction(preferred), routeId: preferred.id,
+            matched: matched.map(route => route.id), reason: 'A proven local route preference matched' };
+        }
+      } catch {
+        // Preference memory is advisory; the normal deterministic/Jev path remains authoritative.
+      }
     }
 
     if (matched.length === 1) {

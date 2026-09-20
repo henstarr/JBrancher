@@ -102,7 +102,7 @@ function isJsonInvocation(ctx) {
 export default async function jbrancherPiExtension(pi) {
   let config = {};
   let runtime = null;
-  const stats = { handled: 0, fallback: 0, failed: 0, jev: 0 };
+  const stats = { handled: 0, fallback: 0, failed: 0, jev: 0, learned: 0 };
 
   async function load(cwd) {
     await loadLocalEnv(cwd);
@@ -116,6 +116,7 @@ export default async function jbrancherPiExtension(pi) {
     const learning = learningEnabled ? createLocalLearningStore({
       directory: config.learningDirectory ? resolve(cwd, config.learningDirectory) : join(cwd, '.jbrancher')
     }) : null;
+    const learnJevChoices = learningEnabled && config.learnJevChoices === true;
     const learnedRecords = learning ? (await learning.readRoutes()).filter(route => route.status === 'active') : [];
     const routes = [
       ...(config.includeBuiltins === false ? [] : builtInRoutes()),
@@ -127,10 +128,13 @@ export default async function jbrancherPiExtension(pi) {
       mode,
       evaluate,
       routes,
-      learning: { enabled: learningEnabled, store: learning, pending: null, learnedRecords },
+      learning: { enabled: learningEnabled, store: learning, pending: null, learnedRecords, preferenceEnabled: learnJevChoices },
       router: createPiRouter({
         routes,
         evaluate,
+        prefer: learnJevChoices ? async ({ task, matched }) => learning.findPreference(task, matched, {
+          minimumObservations: Number(config.preferenceMinimumObservations || 2)
+        }).then(preference => preference?.routeId) : undefined,
         minimumProbability: numberEnv('JBRANCHER_PI_MIN_PROBABILITY', config.minimumProbability ?? 0.7),
         minimumMargin: numberEnv('JBRANCHER_PI_MIN_MARGIN', config.minimumMargin ?? 0.15)
       })
@@ -187,6 +191,11 @@ export default async function jbrancherPiExtension(pi) {
         && typeof runtime.learning.store.recordRouteFailure === 'function') {
         try {
           await runtime.learning.store.recordRouteFailure(outcome.failedRouteId, { reason: outcome.error });
+          if (runtime.learning.preferenceEnabled && typeof runtime.learning.store.recordPreferenceFailure === 'function') {
+            await runtime.learning.store.recordPreferenceFailure({
+              task: event.text, routeId: outcome.failedRouteId, reason: outcome.error
+            });
+          }
           await load(ctx.cwd);
           runtime.learning.pending = createEpisodeRecorder({
             store: runtime.learning.store,
@@ -203,6 +212,19 @@ export default async function jbrancherPiExtension(pi) {
       return { action: 'continue' };
     }
     if (outcome.source === 'jev') stats.jev++;
+    if (outcome.source === 'learned') stats.learned++;
+    if (outcome.source === 'jev' && runtime.learning.preferenceEnabled
+      && typeof runtime.learning.store.recordPreferenceSuccess === 'function') {
+      try {
+        await runtime.learning.store.recordPreferenceSuccess({
+          task: event.text,
+          routeId: outcome.routeId,
+          minimumObservations: Number(config.preferenceMinimumObservations || 2)
+        });
+      } catch (error) {
+        notify(ctx, `JBrancher preference learning failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');
+      }
+    }
     if (outcome.source === 'frontier' || runtime.mode === 'shadow') {
       stats.fallback++;
       if (runtime.mode === 'shadow') notify(ctx, `JBrancher shadow match: ${outcome.matched?.join(', ') || 'none'}; Pi handled the prompt.`);
@@ -342,7 +364,7 @@ export default async function jbrancherPiExtension(pi) {
       }
       const routeNames = runtime?.routes.map(route => route.id).join(', ') || 'none';
       const learningText = runtime?.learning.enabled ? ` · learning: local (${runtime.learning.store.directory})` : '';
-      notify(ctx, `JBrancher ${runtime?.mode || 'inactive'} · routes: ${routeNames} · handled: ${stats.handled} · frontier: ${stats.fallback} · Jev choices: ${stats.jev}${learningText}`);
+      notify(ctx, `JBrancher ${runtime?.mode || 'inactive'} · routes: ${routeNames} · handled: ${stats.handled} · frontier: ${stats.fallback} · Jev choices: ${stats.jev} · learned choices: ${stats.learned}${learningText}`);
     }
   });
 }

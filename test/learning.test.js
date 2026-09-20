@@ -96,6 +96,24 @@ test('local learning stores serialize concurrent route mutations across store in
   }
 });
 
+test('local learning stores promote and quarantine exact route preferences', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-preference-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const first = await store.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 });
+    assert.equal(first.status, 'candidate');
+    const second = await store.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 });
+    assert.equal(second.status, 'active');
+    assert.equal((await store.findPreference('choose the safe inspection route', ['inspect'])).routeId, 'inspect');
+    assert.equal(await store.findPreference('choose the safe inspection route', ['other']), null);
+    const failed = await store.recordPreferenceFailure({ task: 'choose the safe inspection route', routeId: 'inspect', reason: 'route became invalid' });
+    assert.equal(failed.status, 'quarantined');
+    assert.equal(await store.findPreference('choose the safe inspection route', ['inspect']), null);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('learning can replay a repeated read-only workflow with multiple steps', async () => {
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-'));
   try {
