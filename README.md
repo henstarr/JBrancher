@@ -489,6 +489,40 @@ real postcondition, opt into verified promotion with
 `--learning-allow-verified` and send `finishMetadata.postconditionValidated:
 true` only after the harness verifier passes.
 
+### Python / Harbor bridge
+
+The repository includes a dependency-free Python client at
+`integrations/python/jbrancher_proxy.py`:
+
+```python
+from integrations.python import JBrancherProxy
+
+proxy = JBrancherProxy()
+decision = proxy.decide(
+    task="Inspect package.json",
+    state={"repository": "fixture"},
+    candidates=[{"tool": "read", "args": {"path": "package.json"}}],
+)
+
+if decision["source"] == "learned":
+    action = decision["action"]
+else:
+    action = frontier_actor(decision)  # the harness owns this call
+
+result = execute(action)  # the harness owns execution and verification
+proxy.record_episode(
+    "Inspect package.json",
+    [{"tool_name": action["tool"], "input": action["args"], "ok": result.ok}],
+    outcome="success" if result.ok else "failure",
+    route_id=decision.get("routeId"),
+    route_resolution="learned" if decision["source"] == "learned" else "unmatched",
+)
+```
+
+The client uses only Python's standard library. It does not execute actions,
+choose a frontier model, or create an external database, which makes it usable
+inside a Harbor/Pi/custom harness adapter.
+
 ## Use in a harness
 
 ```js

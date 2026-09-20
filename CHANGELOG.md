@@ -20,6 +20,8 @@
   postcondition.
 - Add an opt-in live Codex benchmark that exercises the local HTTP proxy and
   measures real frontier token savings.
+- Add a dependency-free Python proxy client and cross-language learning-loop
+  test for Python/Harbor-style harnesses.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

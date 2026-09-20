@@ -58,6 +58,7 @@
     "extensions",
     "examples",
     "benchmarks",
+    "integrations",
     "docs",
     "README.md",
     ".env.example",

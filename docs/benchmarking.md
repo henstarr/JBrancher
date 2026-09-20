@@ -278,9 +278,10 @@ JBrancher's local `POST /v1/decide` endpoint when it has a bounded candidate
 set, execute the selected action in Harbor's environment, and post the
 completed open-world trajectory to `POST /v1/episodes`. That makes unknown
 routes learnable without making the benchmark harness depend on a JavaScript
-runtime. JBrancher does not currently ship a Python Harbor class, so this
-bridge is an integration seam rather than an assertion that Harbor has already
-been run in this repository.
+runtime. JBrancher ships a dependency-free Python proxy client, but does not
+currently ship a Python `BaseAgent` class; the Harbor adapter remains harness-
+specific and this bridge is not an assertion that Harbor has already been run
+in this repository.
 
 For learned decisions, include the returned `routeId` in the completion
 episode. A successful completion increments the local route's replay counter;
