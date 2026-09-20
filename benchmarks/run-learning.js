@@ -255,6 +255,35 @@ async function benchmarkVerifiedWorkflow(store) {
   };
 }
 
+async function benchmarkVerifiedRecovery(store) {
+  let actorCalls = 0;
+  const createBrancher = valid => createJBrancher({
+    getCandidates: async () => [{ tool: 'write', args: { path: 'out.txt', content: 'verified' } }],
+    actor: async () => {
+      actorCalls++;
+      return { action: { tool: 'write', args: { path: 'out.txt', content: 'verified' } } };
+    },
+    execute: async () => ({ written: true }),
+    learningStore: store,
+    learningSource: 'verified-recovery-benchmark',
+    learningPromotionMode: 'verified',
+    learningOutcome: () => valid
+  });
+
+  await createBrancher(true).step({ task: 'apply the verified fixture update' });
+  await createBrancher(true).step({ task: 'apply the verified fixture update' });
+  const route = (await store.readRoutes())[0];
+  const recovered = await createBrancher(false).step({ task: 'apply the verified fixture update' });
+  const current = (await store.readRoutes())[0];
+  return {
+    actorCalls,
+    decisionSource: recovered.decision.source,
+    learnedRouteQuarantined: recovered.learnedRouteQuarantined === true,
+    fallbackAfterLearnedRoute: recovered.fallbackAfterLearnedRoute,
+    quarantined: current?.id === route?.id && current.status === 'quarantined'
+  };
+}
+
 const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-swebench-learning-'));
 try {
   const store = createLocalLearningStore({ directory: join(directory, 'swebench') });
@@ -263,6 +292,7 @@ try {
   const jevLearningStore = createLocalLearningStore({ directory: join(directory, 'jev-learning') });
   const piPreferenceStore = createLocalLearningStore({ directory: join(directory, 'pi-preference') });
   const verifiedStore = createLocalLearningStore({ directory: join(directory, 'verified-harness') });
+  const verifiedRecoveryStore = createLocalLearningStore({ directory: join(directory, 'verified-recovery') });
   const rows = [];
   const genericRows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
@@ -277,6 +307,7 @@ try {
   const genericLearnedActorCalls = genericRows.reduce((sum, row) => sum + row.actorCalls, 0);
   const pathTemplate = await benchmarkPathTemplate(pathTemplateStore);
   const verifiedWorkflow = await benchmarkVerifiedWorkflow(verifiedStore);
+  const verifiedRecovery = await benchmarkVerifiedRecovery(verifiedRecoveryStore);
   const report = {
     benchmark: 'JBrancher local learning replay on SWE-bench Lite bug prompts',
     source: { url: fixture.sourceUrl, instances: fixture.instances.length, repetitions, warmupAttempts, retrievedAt: fixture.retrievedAt },
@@ -314,6 +345,7 @@ try {
     jevLearning,
     piPreference,
     verifiedHarness: verifiedWorkflow,
+    verifiedRecovery,
     pathTemplate,
     rows
   };
@@ -328,6 +360,10 @@ try {
     if (report.piPreference.routeCoverage !== true) failures.push('Pi preference route coverage is below 100%');
     if (report.piPreference.jevCallReduction <= 0) failures.push('Pi preference learning did not reduce evaluator calls');
     if (report.pathTemplate.unseenPathHandled !== true) failures.push('path template did not handle an unseen path');
+    if (report.verifiedRecovery.decisionSource !== 'actor') failures.push('verified replay did not recover through the actor');
+    if (!report.verifiedRecovery.learnedRouteQuarantined || !report.verifiedRecovery.quarantined) {
+      failures.push('verified replay failure was not quarantined');
+    }
     if (failures.length) throw new Error(`Learning benchmark assertions failed: ${failures.join('; ')}`);
   }
   console.log(JSON.stringify(report, null, 2));

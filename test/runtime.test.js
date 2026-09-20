@@ -136,6 +136,47 @@ test('generic brancher records unknown actor fallback episodes in a local store'
   }
 });
 
+test('generic runtime learns an open-world route before replaying it when authorized', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-open-world-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let actorCalls = 0;
+    const action = { tool: 'read', args: { path: 'notes.md' } };
+    const brancher = createJBrancher({
+      // The frontier actor can invent/choose the action on a cold request.
+      // The action becomes replayable only when the harness exposes it as a
+      // currently authorized capability.
+      getCandidates: async ({ state }) => state.capabilitiesReady ? [action] : [],
+      actor: async () => {
+        actorCalls++;
+        return { action };
+      },
+      execute: async () => 'notes',
+      learningStore: store,
+      learningSource: 'open-world-test',
+      learningCwd: directory
+    });
+
+    const first = await brancher.step({ task: 'Read notes.md', state: { capabilitiesReady: false } });
+    const second = await brancher.step({ task: 'Read notes.md', state: { capabilitiesReady: false } });
+    assert.deepEqual([first.decision.source, second.decision.source], ['actor', 'actor']);
+    assert.equal(first.decision.routeResolution, 'unmatched');
+    assert.equal(second.decision.routeResolution, 'unmatched');
+    assert.equal(actorCalls, 2);
+
+    const routes = await store.readRoutes();
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+
+    const warm = await brancher.step({ task: 'Read notes.md', state: { capabilitiesReady: true } });
+    assert.equal(warm.decision.source, 'learned');
+    assert.equal(actorCalls, 2);
+    assert.equal((await store.readTraces()).length, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic runtime exposes a first fallback as a candidate without activating it', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-candidate-'));
   try {
@@ -293,9 +334,10 @@ test('generic runtime quarantines a learned single step when its postcondition f
     await makeBrancher(() => true).step({ task: 'write verified output' });
     await makeBrancher(() => true).step({ task: 'write verified output' });
     const result = await makeBrancher(() => false).step({ task: 'write verified output' });
-    assert.equal(result.decision.source, 'learned');
+    assert.equal(result.decision.source, 'actor');
     assert.equal(result.learningOutcome, 'unknown');
     assert.equal(result.learnedRouteQuarantined, true);
+    assert.equal(result.fallbackAfterLearnedRoute, (await store.readRoutes())[0].id);
     assert.equal((await store.readRoutes())[0].status, 'quarantined');
   } finally {
     await rm(directory, { recursive: true, force: true });
@@ -361,6 +403,8 @@ test('generic brancher revalidates learned workflows and quarantines a failed po
     });
     assert.equal(replay.learningOutcome, 'unknown');
     assert.equal(replay.learnedRouteQuarantined, true);
+    assert.equal(replay.events.at(-1).decision.source, 'actor');
+    assert.equal(replay.fallbackAfterLearnedRoute, (await store.readRoutes())[0].id);
     assert.equal((await store.readRoutes()).every(route => route.status === 'quarantined'), true);
   } finally {
     await rm(directory, { recursive: true, force: true });

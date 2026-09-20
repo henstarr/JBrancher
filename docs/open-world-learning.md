@@ -64,6 +64,29 @@ No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the
 open-world portion until the local dataset contains enough verified evidence.
 
+The frontier path and replay path have different trust boundaries. The actor may
+choose a new action on an unmatched request, but a learned action is replayed
+only when the harness exposes the same action through its current capability
+catalog. In a generic integration, make `getCandidates` derive from current
+state, permissions, and tool availability rather than from a static list of
+registered prompts:
+
+```js
+const brancher = createJBrancher({
+  getCandidates: ({ state }) => harness.authorizedActions(state),
+  actor: context => frontier.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: learner.store,
+  learningSource: 'my-harness',
+  learningOutcome: context => harness.isComplete(context.state, context.events)
+});
+```
+
+If `authorizedActions` returns an empty array, the actor still handles the
+request and the episode is recorded as `routeResolution: "unmatched"`. When a
+later state exposes the action as legal, the same local evidence can become a
+fast path without adding a hand-written route.
+
 ## Measure the cold-to-warm loop
 
 Run the local discovery benchmark:

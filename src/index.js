@@ -131,7 +131,7 @@ export function createJBrancher({
         if (learned.length === 1) {
           return { source: 'learned', action: clone(learned[0].action), routeId: learned[0].id,
             routeResolution: 'learned',
-            reason: 'A proven local read-only route matched', usage: [] };
+            reason: 'A proven local route matched', usage: [] };
         }
       } catch {
         // Learned routing is advisory; the normal candidate/evaluator path remains authoritative.
@@ -265,7 +265,36 @@ export function createJBrancher({
             reason: 'Harness postcondition rejected learned step'
           }).catch(() => {});
         }
-        return { ...event, learningOutcome: outcome, learnedRouteQuarantined: true };
+        // A learned shortcut is advisory. If the harness rejects its
+        // postcondition, quarantine it and give the frontier actor a recovery
+        // turn instead of ending the task at the failed shortcut.
+        const recovery = await executeStep(input, recorder);
+        const recoveryOutcome = await validatedOutcome({
+          task: input.task,
+          state: input.state,
+          history: input.history,
+          event: recovery,
+          events: [event, recovery]
+        });
+        recordEpisode = shouldRecord(recovery.decision);
+        await finishRecorder(recorder, {
+          recordEpisode,
+          ...(recoveryOutcome ? { outcome: recoveryOutcome } : {}),
+          metadata: {
+            mode: 'step',
+            decisionSource: recovery.decision.source,
+            ...(recovery.decision.routeResolution ? { routeResolution: recovery.decision.routeResolution } : {}),
+            learnedRouteQuarantined: true,
+            fallbackAfterLearnedRoute: event.decision.routeId,
+            ...(learningOutcome && recoveryOutcome ? { postconditionValidated: recoveryOutcome === 'success' } : {})
+          }
+        });
+        return {
+          ...recovery,
+          learningOutcome: recoveryOutcome || outcome,
+          learnedRouteQuarantined: true,
+          fallbackAfterLearnedRoute: event.decision.routeId
+        };
       }
       await finishRecorder(recorder, {
         recordEpisode,
@@ -279,7 +308,11 @@ export function createJBrancher({
       });
       return event;
     } catch (error) {
-      await finishRecorder(recorder, { recordEpisode, outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
+      await finishRecorder(recorder, {
+        recordEpisode: recordEpisode || Boolean(recorder?.toolCalls?.length),
+        outcome: 'unknown',
+        metadata: { mode: 'step' }
+      }).catch(() => {});
       throw error;
     }
   }
@@ -312,7 +345,7 @@ export function createJBrancher({
       if (!Array.isArray(candidates) || !candidates.some(candidate => sameAction(candidate, action))) return null;
       const decision = { source: 'learned', action: clone(action), routeId: workflows[0].id,
         routeResolution: 'learned',
-        reason: 'A proven local read-only workflow matched', usage: [] };
+        reason: 'A proven local workflow matched', usage: [] };
       const event = { step: stepNumber, state: clone(state), decision: clone(decision) };
       try {
         event.result = await execute(clone(action), {
@@ -347,6 +380,7 @@ export function createJBrancher({
       })
       : null;
     let recordEpisode = false;
+    let recoveryMetadata = {};
     try {
       const learnedRun = await replayLearnedWorkflow(input, state, history);
       if (learnedRun) {
@@ -362,11 +396,22 @@ export function createJBrancher({
               reason: 'Harness postcondition rejected learned replay'
             }).catch(() => {});
           }
-          return { ...learnedRun, learningOutcome: replayOutcome, learnedRouteQuarantined: true };
+          // Keep the observed state/history and continue with the frontier
+          // actor. A failed learned workflow must be recovery evidence, not a
+          // terminal result for the caller.
+          events.push(...learnedRun.events);
+          state = clone(learnedRun.state);
+          history = clone(learnedRun.history);
+          recoveryMetadata = {
+            learnedRouteQuarantined: true,
+            fallbackAfterLearnedRoute: learnedRun.learningRouteId,
+            learnedReplayOutcome: replayOutcome
+          };
+        } else {
+          return learnedRun;
         }
-        return learnedRun;
       }
-      for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
+      for (let stepNumber = events.length; stepNumber < maxSteps; stepNumber++) {
         const event = await executeStep({ ...input, state, history, step: stepNumber }, recorder);
         recordEpisode ||= shouldRecord(event.decision);
         events.push(event);
@@ -384,18 +429,26 @@ export function createJBrancher({
           mode: 'run',
           steps: events.length,
           ...(routeResolution ? { routeResolution } : {}),
+          ...recoveryMetadata,
           ...(learningOutcome && outcome ? { postconditionValidated: outcome === 'success' } : {})
         }
       });
     } catch (error) {
       await finishRecorder(recorder, {
-        recordEpisode,
+        recordEpisode: recordEpisode || Boolean(recorder?.toolCalls?.length),
         outcome: 'unknown',
-        metadata: { mode: 'run', steps: events.length }
+        metadata: { mode: 'run', steps: events.length, ...recoveryMetadata }
       }).catch(() => {});
       throw error;
     }
-    return { events, state, history };
+    const recoveryResult = recoveryMetadata.learnedRouteQuarantined
+      ? {
+        learningOutcome: recoveryMetadata.learnedReplayOutcome,
+        learnedRouteQuarantined: true,
+        fallbackAfterLearnedRoute: recoveryMetadata.fallbackAfterLearnedRoute
+      }
+      : {};
+    return { events, state, history, ...recoveryResult };
   }
 
   return { decide, step, run, metadata: {

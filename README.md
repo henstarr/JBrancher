@@ -317,6 +317,18 @@ no longer legal. `learningOutcome` is optional; when supplied, it is the
 harness-owned postcondition that decides whether an episode is eligible for
 promotion.
 
+If a learned step executes but the postcondition rejects it, JBrancher
+quarantines the route and gives the frontier actor a recovery turn in the same
+task. The recovery episode is retained locally, so stale shortcuts add failure
+evidence instead of becoming a dead end.
+
+The frontier actor is open-world: it may handle a task with no registered route
+or candidate. Replay is intentionally narrower. To replay a learned action, the
+harness must expose that action in its current `getCandidates` capability set;
+this lets a route be discovered freely while keeping execution authorization in
+the harness. A dynamic tool/capability catalog is the recommended way to make
+newly discovered routes available without manually registering every task.
+
 By default, an actor fallback is recorded even when it selects no tool (for
 example, a direct answer or an intentional no-op). That still becomes a
 redacted dataset example, but it is not a replayable route until the harness

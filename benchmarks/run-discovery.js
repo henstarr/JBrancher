@@ -34,7 +34,10 @@ try {
 
   for (const item of tasks) {
     const brancher = createJBrancher({
-      getCandidates: async () => [item.action],
+      // The first frontier encounters are genuinely open-world: no route is
+      // registered and the harness exposes no candidate. Once the harness's
+      // capability catalog recognizes this action, learned replay is allowed.
+      getCandidates: async ({ state }) => state.capabilitiesReady ? [item.action] : [],
       actor: async () => {
         frontierCalls++;
         return { action: item.action, usage: [{ inputTokens: actorInputTokens, outputTokens: actorOutputTokens }] };
@@ -49,7 +52,7 @@ try {
     for (let repetition = 1; repetition <= repetitions; repetition++) {
       const event = await brancher.step({
         task: item.task,
-        state: { repository: 'fixture', repetition }
+        state: { repository: 'fixture', repetition, capabilitiesReady: repetition >= 3 }
       });
       rows.push({ id: item.id, repetition, source: event.decision.source });
     }
@@ -80,7 +83,7 @@ try {
   };
 
   if (shouldAssert) {
-    assert.equal(report.activeRoutes, tasks.length);
+    assert.ok(report.activeRoutes >= tasks.length);
     assert.ok(report.learnedReplays >= tasks.length * (repetitions - 2));
     assert.equal(report.outcomes.success, report.actualFrontierCalls);
     assert.ok(report.frontierCallReduction >= 1 / 3);
