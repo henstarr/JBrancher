@@ -132,6 +132,7 @@ export function createPiRouter({ routes = [], evaluate, minimumProbability = 0.7
       return { ...decision, result };
     } catch (error) {
       return { ...decision, source: 'frontier', routeId: null,
+        failedRouteId: decision.routeId,
         reason: 'Deterministic route failed; frontier fallback is required',
         error: error instanceof Error ? error.message : String(error) };
     }

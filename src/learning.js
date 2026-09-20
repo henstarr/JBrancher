@@ -237,11 +237,19 @@ function learnedActionFromRecord(record, task) {
  * available through createLearnedRoutes for Pi, but are not flattened into a
  * generic harness action.
  */
-export function createLearnedActions(records = [], task = '') {
+export function findLearnedActions(records = [], task = '') {
   if (!Array.isArray(records)) throw new TypeError('records must be an array');
   if (typeof task !== 'string') throw new TypeError('task must be a string');
-  const actions = records.map(record => learnedActionFromRecord(record, task)).filter(Boolean);
-  return actions.filter((action, index) => actions.findIndex(item => actionKey(item.tool, item.args) === actionKey(action.tool, action.args)) === index);
+  const matches = records.map(record => {
+    const action = learnedActionFromRecord(record, task);
+    return action ? { id: record.id, action } : null;
+  }).filter(Boolean);
+  return matches.filter((match, index) => matches.findIndex(item => actionKey(item.action.tool, item.action.args)
+    === actionKey(match.action.tool, match.action.args)) === index);
+}
+
+export function createLearnedActions(records = [], task = '') {
+  return findLearnedActions(records, task).map(match => match.action);
 }
 
 export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
@@ -512,7 +520,9 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     const candidates = proposeRoutes(await readTraces(), options);
     for (const candidate of candidates) {
       const previous = existingById.get(candidate.id);
-      existingById.set(candidate.id, previous?.status === 'active' ? previous : { ...previous, ...candidate });
+      existingById.set(candidate.id, previous?.status === 'active' || previous?.status === 'quarantined'
+        ? { ...candidate, ...previous, status: previous.status }
+        : { ...previous, ...candidate });
     }
     return writeRoutes([...existingById.values()]);
   }
@@ -522,13 +532,26 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     const route = routes.find(item => item.id === id);
     if (!route) throw new Error(`Unknown learned route: ${id}`);
     if (!force && route.safety !== 'read-only') throw new Error('Only read-only routes can be promoted automatically');
+    if (!force && route.status === 'quarantined') throw new Error('Quarantined routes require explicit force to promote');
     route.status = 'active';
     route.promotedAt = new Date().toISOString();
     await writeRoutes(routes);
     return route;
   }
 
-  return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote };
+  async function recordRouteFailure(id, { reason = '' } = {}) {
+    const routes = await readRoutes();
+    const route = routes.find(item => item.id === id);
+    if (!route) return null;
+    route.status = 'quarantined';
+    route.failures = Number.isSafeInteger(route.failures) ? route.failures + 1 : 1;
+    route.lastFailureAt = new Date().toISOString();
+    if (reason) route.failureReason = redactText(String(reason), 500);
+    await writeRoutes(routes);
+    return route;
+  }
+
+  return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote, recordRouteFailure };
 }
 
 export async function refreshAndPromoteReadOnly(store, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {

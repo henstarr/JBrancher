@@ -107,6 +107,7 @@ async function learn() {
     datasetExamples: dataset.examples.length,
     candidates: routes.filter(route => route.status === 'candidate').length,
     activeReadOnlyRoutes: routes.filter(route => route.status === 'active' && route.safety === 'read-only').length,
+    quarantinedRoutes: routes.filter(route => route.status === 'quarantined').length,
     promoted: learned.promoted.map(route => route.id),
     datasetPath: dataset.path,
     routesPath: store.routesPath

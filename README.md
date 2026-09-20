@@ -178,7 +178,9 @@ relative file request without a frontier turn.
 
 Use `/jbrancher candidates` to inspect candidates and `/jbrancher promote <id>`
 for explicit promotion. Unknown or side-effecting actions remain fallback-only
-until explicitly configured. Run the local SWE-bench Lite replay
+until explicitly configured. If a learned route later fails during execution,
+JBrancher quarantines it locally and returns control to the frontier path rather
+than retrying the stale route forever. Run the local SWE-bench Lite replay
 benchmark with:
 
 ```sh

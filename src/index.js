@@ -1,4 +1,4 @@
-import { createEpisodeRecorder, createLearnedActions, refreshAndPromoteReadOnly } from './learning.js';
+import { createEpisodeRecorder, findLearnedActions, refreshAndPromoteReadOnly } from './learning.js';
 
 const clone = value => structuredClone(value);
 
@@ -102,10 +102,11 @@ export function createJBrancher({
 
     if (learningStore && getCandidates && typeof learningStore.readRoutes === 'function' && candidates.length > 0) {
       try {
-        const learned = createLearnedActions(await learningStore.readRoutes(), task)
-          .filter(action => candidates.some(candidate => sameAction(candidate, action)));
+        const learned = findLearnedActions(await learningStore.readRoutes(), task)
+          .filter(match => candidates.some(candidate => sameAction(candidate, match.action)));
         if (learned.length === 1) {
-          return { source: 'learned', action: clone(learned[0]), reason: 'A proven local read-only route matched', usage: [] };
+          return { source: 'learned', action: clone(learned[0].action), routeId: learned[0].id,
+            reason: 'A proven local read-only route matched', usage: [] };
         }
       } catch {
         // Learned routing is advisory; the normal candidate/evaluator path remains authoritative.
@@ -181,6 +182,9 @@ export function createJBrancher({
         if (toolCallId) recorder.recordToolResult({ toolCallId, output: event.result });
       } catch (error) {
         if (toolCallId) recorder.recordToolResult({ toolCallId, isError: true, output: error?.message || String(error) });
+        if (decision.source === 'learned' && typeof learningStore?.recordRouteFailure === 'function') {
+          await learningStore.recordRouteFailure(decision.routeId, { reason: error?.message || String(error) }).catch(() => {});
+        }
         throw error;
       }
     }

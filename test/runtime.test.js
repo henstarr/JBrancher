@@ -117,6 +117,18 @@ test('generic brancher records unknown actor fallback episodes in a local store'
     const learned = await brancher.step({ task: 'Read README.md' });
     assert.equal(learned.decision.source, 'learned');
     assert.equal(actorCalls, 2);
+    const stale = createJBrancher({
+      getCandidates: async () => [{ tool: 'read', args: { path: 'README.md' } }],
+      actor: async () => ({ action: { tool: 'read', args: { path: 'README.md' } } }),
+      execute: async () => { throw new Error('stale route'); },
+      learningStore: store,
+      learningCwd: directory
+    });
+    await assert.rejects(stale.step({ task: 'Read README.md' }), /stale route/);
+    assert.equal((await store.readRoutes())[0].status, 'quarantined');
+    const afterFailure = await brancher.step({ task: 'Read README.md' });
+    assert.equal(afterFailure.decision.source, 'actor');
+    assert.equal(actorCalls, 3);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

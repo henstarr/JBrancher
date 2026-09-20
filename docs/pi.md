@@ -144,6 +144,12 @@ The local loop is deliberately conservative:
    is available for explicit manual promotion.
 6. The active route can answer the same prompt without a frontier turn.
 
+If an active learned route later fails, it is marked `quarantined`, removed from
+the active route set, and the prompt falls back to Pi. This prevents a stale
+route from becoming a repeated failure loop. Re-promoting a quarantined route
+requires an explicit `force` call through the learning API after the underlying
+problem has been reviewed.
+
 Learned routes currently support exact normalized prompts and conservative
 token-similarity matches for one or more repeated `read` actions, plus a small
 allowlist of read-only `bash` commands. Similarity generalization requires
