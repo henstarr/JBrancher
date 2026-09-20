@@ -20,6 +20,25 @@ To save a machine-readable report:
 npm run bench:offline -- --write results/routing.json
 ```
 
+## Current local snapshot
+
+The reproducible local learning benchmark currently uses three real SWE-bench
+Lite problem statements, eight repetitions per task, and four warm-up attempts:
+
+- Pi-style read-only replay: 24 simulated frontier calls down to 12 (50%
+  fewer), with 100% route coverage and 944 estimated prompt tokens saved.
+- Generic two-step harness replay: 72 actor calls down to 18 (75% fewer),
+  with 100% route coverage.
+- Postcondition-verified write arm: the third repeated action uses the learned
+  route after two actor warm-ups, avoiding 33.3% of actor calls in that
+  three-attempt trial.
+- Context hill climb: 3,350 estimated context tokens down to 1,950 (41.8%
+  fewer) while retaining 100% fixture coverage.
+
+These are routing-efficiency and synthetic context measurements, not official
+patch-resolution scores. Re-run them locally after changing the learner; run
+the official SWE-bench Docker harness separately for task success.
+
 The fixture compares three controls:
 
 - `actor-only`: the existing actor chooses every step.
