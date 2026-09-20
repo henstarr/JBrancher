@@ -113,6 +113,22 @@ supplied actor assumptions, is summarized in
 Jev and actor calls on a three-repetition fixture while preserving the fixture
 verifier result; the actor tokens remain assumptions, not provider telemetry.
 
+For a real frontier-actor learning run, use the installed Codex CLI in a
+temporary read-only workspace:
+
+```sh
+npm run bench:live-codex -- --instances 1 --repetitions 3
+```
+
+This runs the same SWE-bench-derived decision prompt against Codex for the
+actor-only arm and for JBrancher warm-up attempts. Later attempts use the
+project-local learned route. Codex usage is observed from its JSON event stream;
+pass `--actor-input-rate` and `--actor-output-rate` to add a cost estimate.
+The benchmark never grants write access to the repository and removes its
+temporary learning store after the run.
+The latest checked-in real-actor sample is in
+[docs/live-codex-2026-09-20.md](live-codex-2026-09-20.md).
+
 ```sh
 python -m pip install -r benchmarks/requirements.txt
 ```
