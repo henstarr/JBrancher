@@ -268,6 +268,17 @@ runtime. JBrancher does not currently ship a Python Harbor class, so this
 bridge is an integration seam rather than an assertion that Harbor has already
 been run in this repository.
 
+For learned decisions, include the returned `routeId` in the completion
+episode. A successful completion increments the local route's replay counter;
+the same feedback path lets a harness preserve failed-route evidence and fall
+back to its frontier recovery policy. Mark the episode as `outcome: "failure"`
+or `routeResolution: "failed"` when the learned route's postcondition fails;
+the proxy quarantines that route before the next decision.
+
+Keep the proxy in its default read-only promotion mode for general workloads.
+Use `--learning-allow-verified` only when the harness supplies
+`finishMetadata.postconditionValidated: true` after its own verifier passes.
+
 The initial run should be small and paired:
 
 ```sh

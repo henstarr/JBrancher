@@ -59,7 +59,8 @@ export function createJBrancherServer({
   learningAutoPromote = true,
   learningMinimumObservations = 2,
   learningCandidateMinimumObservations = 1,
-  learningMinimumSimilarity = 0.8
+  learningMinimumSimilarity = 0.8,
+  learningAllowVerified = false
 } = {}) {
   const evaluator = evaluate ?? (apiKey ? createJevEvaluator({ apiKey, model, endpoint, timeoutMs, fetchImpl }) : undefined);
   const learner = typeof learningDirectory === 'string' && learningDirectory
@@ -70,7 +71,8 @@ export function createJBrancherServer({
       autoPromote: learningAutoPromote,
       minimumObservations: learningMinimumObservations,
       candidateMinimumObservations: learningCandidateMinimumObservations,
-      minimumSimilarity: learningMinimumSimilarity
+      minimumSimilarity: learningMinimumSimilarity,
+      allowVerified: learningAllowVerified
     })
     : undefined;
   const stats = {
@@ -116,6 +118,9 @@ export function createJBrancherServer({
         if (!Array.isArray(input.toolCalls)) {
           return sendJson(response, 400, { error: 'toolCalls must be an array' });
         }
+        if (input.routeId !== undefined && (typeof input.routeId !== 'string' || !input.routeId)) {
+          return sendJson(response, 400, { error: 'routeId must be a non-empty string when provided' });
+        }
         for (const call of input.toolCalls) {
           if (!call || typeof call !== 'object'
             || typeof call.toolName !== 'string' || !call.toolName
@@ -130,7 +135,10 @@ export function createJBrancherServer({
           episodeCwd: input.cwd ?? learningCwd,
           episodeSource: input.source ?? learningSource,
           routeResolution: input.routeResolution ?? 'unmatched',
-          metadata: input.metadata ?? {}
+          metadata: {
+            ...(input.metadata ?? {}),
+            ...(input.routeId ? { routeId: input.routeId } : {})
+          }
         });
         try {
           for (const [index, call] of input.toolCalls.entries()) {
@@ -153,9 +161,19 @@ export function createJBrancherServer({
             outcome: input.outcome,
             metadata: input.finishMetadata ?? {}
           });
+          const routeSuccessRecorded = trace.outcome === 'success' && input.routeId
+            && typeof learner.store.recordRouteSuccess === 'function'
+            ? await learner.store.recordRouteSuccess(input.routeId)
+            : null;
+          const routeFailureRecorded = (trace.outcome === 'failure' || trace.routeResolution === 'failed') && input.routeId
+            && typeof learner.store.recordRouteFailure === 'function'
+            ? await learner.store.recordRouteFailure(input.routeId, { reason: input.failureReason ?? 'Harness reported learned-route failure' })
+            : null;
           stats.episodesRecorded += 1;
           return sendJson(response, 201, {
             trace,
+            routeSuccessRecorded: Boolean(routeSuccessRecorded),
+            routeFailureRecorded: Boolean(routeFailureRecorded),
             learning: await learner.snapshot()
           });
         } catch (error) {
@@ -182,6 +200,8 @@ export function createJBrancherServer({
         learningMinimumObservations,
         learningCandidateMinimumObservations,
         learningMinimumSimilarity,
+        learningPromotionMode: learningAllowVerified ? 'verified' : 'safe',
+        learningOutcome: learningAllowVerified ? async () => true : undefined,
         evaluate: evaluator ? async context => {
           stats.evaluatorCalls += 1;
           return evaluator(context);

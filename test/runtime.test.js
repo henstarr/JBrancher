@@ -500,11 +500,107 @@ test('decision service ingests open-world episodes into the local learning datas
     assert.equal(replay.source, 'learned');
     assert.deepEqual(replay.action, { tool: 'read', args: { path: 'package.json' } });
     assert.equal(evaluatorCalls, 0);
+    const replayFeedback = await fetch(`${baseUrl}/v1/episodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Inspect package.json',
+        routeId: replay.routeId,
+        routeResolution: 'learned',
+        source: 'python-harness',
+        toolCalls: [{
+          toolCallId: 'learned-call-1',
+          toolName: 'read',
+          input: { path: 'package.json' },
+          ok: true,
+          output: 'package contents'
+        }],
+        outcome: 'success'
+      })
+    }).then(result => result.json());
+    assert.equal(replayFeedback.routeSuccessRecorded, true);
     const stats = await fetch(`${baseUrl}/stats`).then(result => result.json());
-    assert.equal(stats.episodesRecorded, 2);
+    assert.equal(stats.episodesRecorded, 3);
     assert.equal(stats.sources.learned, 1);
     const learning = await fetch(`${baseUrl}/v1/learning`).then(result => result.json());
-    assert.equal(learning.traces, 2);
+    assert.equal(learning.traces, 3);
+    assert.equal(learning.successfulReplays, 1);
+  } finally {
+    await service.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('decision service requires explicit postcondition verification for learned writes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-proxy-verified-'));
+  let evaluatorCalls = 0;
+  const service = createJBrancherServer({
+    evaluate: async () => { evaluatorCalls += 1; return { scores: [0.9], usage: [] }; },
+    learningDirectory: directory,
+    learningAllowVerified: true
+  });
+  const address = await service.listen({ port: 0 });
+  try {
+    const baseUrl = `http://${address.host}:${address.port}`;
+    const post = () => fetch(`${baseUrl}/v1/episodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Update the generated artifact',
+        routeResolution: 'unmatched',
+        toolCalls: [{
+          toolName: 'write',
+          input: { path: 'output.txt', content: 'verified' },
+          ok: true,
+          output: 'written'
+        }],
+        finishMetadata: { postconditionValidated: true },
+        outcome: 'success'
+      })
+    });
+    assert.equal((await post()).status, 201);
+    assert.equal((await post()).status, 201);
+    const decision = await fetch(`${baseUrl}/v1/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Update the generated artifact',
+        candidates: [{ tool: 'write', args: { path: 'output.txt', content: 'verified' } }]
+      })
+    }).then(result => result.json());
+    assert.equal(decision.source, 'learned');
+    assert.deepEqual(decision.action, { tool: 'write', args: { path: 'output.txt', content: 'verified' } });
+    assert.equal(evaluatorCalls, 0);
+    const failed = await fetch(`${baseUrl}/v1/episodes`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Update the generated artifact',
+        routeId: decision.routeId,
+        routeResolution: 'failed',
+        toolCalls: [{
+          toolName: 'write',
+          input: { path: 'output.txt', content: 'verified' },
+          ok: false,
+          output: 'postcondition failed'
+        }],
+        failureReason: 'postcondition failed',
+        outcome: 'failure'
+      })
+    }).then(result => result.json());
+    assert.equal(failed.routeFailureRecorded, true);
+    const recovered = await fetch(`${baseUrl}/v1/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Update the generated artifact',
+        candidates: [{ tool: 'write', args: { path: 'output.txt', content: 'verified' } }]
+      })
+    }).then(result => result.json());
+    assert.equal(recovered.source, 'jev');
+    assert.equal(evaluatorCalls, 1);
+    const learning = await fetch(`${baseUrl}/v1/learning`).then(result => result.json());
+    assert.equal(learning.quarantinedRoutes, 1);
   } finally {
     await service.close();
     await rm(directory, { recursive: true, force: true });

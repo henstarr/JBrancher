@@ -478,6 +478,17 @@ redaction, durable local traces, dataset construction, and conservative route
 promotion. The storage is local JSONL/JSON by design; bind the proxy to
 localhost unless you add your own authentication and network boundary.
 
+When `/v1/decide` returns `source: "learned"`, send the returned `routeId` back
+with the completed episode. A successful episode increments that route's local
+replay telemetry; a failed episode remains evidence for the harness to inspect
+and, when sent with `outcome: "failure"` or `routeResolution: "failed"`,
+quarantines the route before the frontier recovery path.
+
+The default proxy only promotes read-only routes. For a harness that supplies a
+real postcondition, opt into verified promotion with
+`--learning-allow-verified` and send `finishMetadata.postconditionValidated:
+true` only after the harness verifier passes.
+
 ## Use in a harness
 
 ```js

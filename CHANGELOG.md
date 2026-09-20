@@ -12,6 +12,12 @@
 - Add an opt-in local HTTP episode bridge for open-world harnesses, including
   learned-route replay through `/v1/decide` and a SWE-bench-derived proxy
   benchmark with CI assertions.
+- Accept learned-route completion feedback from remote harnesses and persist
+  successful replay telemetry in the local route store.
+- Add opt-in postcondition-verified promotion for proxy-managed write routes;
+  read-only promotion remains the default.
+- Quarantine a learned proxy route when a harness reports a failed outcome or
+  postcondition.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

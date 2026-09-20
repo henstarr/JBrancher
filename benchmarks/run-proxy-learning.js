@@ -80,11 +80,28 @@ try {
           state: { repository: instance.repo, repetition },
           candidates: [action]
         });
+        const feedback = await requestJson(baseUrl, '/v1/episodes', {
+          task,
+          routeId: decision.routeId,
+          source: 'proxy-learning-benchmark',
+          routeResolution: 'learned',
+          metadata: { instanceId: instance.instance_id, repetition },
+          toolCalls: [{
+            toolCallId: `learned-call-${instance.instance_id}-${repetition}`,
+            toolName: action.tool,
+            input: action.args,
+            context: { source: decision.source },
+            ok: decision.source === 'learned',
+            output: `fixture contents for ${action.args.path}`
+          }],
+          outcome: decision.source === 'learned' ? 'success' : 'unknown'
+        });
         attempts.push({
           repetition,
           source: decision.source,
           routeId: decision.routeId ?? null,
           correct: JSON.stringify(decision.action) === JSON.stringify(action),
+          routeSuccessRecorded: feedback.routeSuccessRecorded,
           evaluatorCalls: service.stats.evaluatorCalls
         });
       }
@@ -126,18 +143,20 @@ try {
     recordedEpisodes: stats.episodesRecorded,
     datasetExamples: snapshot.traces,
     activeRoutes: snapshot.activeRoutes,
+    successfulReplays: snapshot.successfulReplays,
     successRate: rows.every(row => row.attempts.every(attempt => attempt.correct)) ? 1 : 0,
     rows
   };
 
   if (shouldAssert) {
     assert.equal(report.activeRoutes, instances.length);
-    assert.equal(report.recordedEpisodes, instances.length * 2);
-    assert.equal(report.datasetExamples, instances.length * 2);
+    assert.equal(report.recordedEpisodes, instances.length * repetitions);
+    assert.equal(report.datasetExamples, instances.length * repetitions);
     assert.equal(report.evaluatorCalls, 0);
     assert.equal(report.routeCoverage, true);
     assert.equal(report.successRate, 1);
     assert.equal(report.learnedReplays, instances.length * (repetitions - 2));
+    assert.equal(snapshot.successfulReplays, report.learnedReplays);
     assert.ok(report.frontierCallReduction >= 1 / 3);
   }
   console.log(JSON.stringify(report, null, 2));
