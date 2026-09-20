@@ -100,11 +100,14 @@ test('local learning stores promote and quarantine exact route preferences', asy
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-preference-'));
   try {
     const store = createLocalLearningStore({ directory });
-    const first = await store.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 });
-    assert.equal(first.status, 'candidate');
-    const second = await store.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 });
-    assert.equal(second.status, 'active');
+    const concurrentStore = createLocalLearningStore({ directory });
+    const [first, second] = await Promise.all([
+      store.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 }),
+      concurrentStore.recordPreferenceSuccess({ task: 'choose the safe inspection route', routeId: 'inspect', minimumObservations: 2 })
+    ]);
+    assert.deepEqual(new Set([first.status, second.status]), new Set(['candidate', 'active']));
     assert.equal((await store.findPreference('choose the safe inspection route', ['inspect'])).routeId, 'inspect');
+    assert.equal((await store.readPreferences())[0].observations, 2);
     assert.equal(await store.findPreference('choose the safe inspection route', ['other']), null);
     const failed = await store.recordPreferenceFailure({ task: 'choose the safe inspection route', routeId: 'inspect', reason: 'route became invalid' });
     assert.equal(failed.status, 'quarantined');
