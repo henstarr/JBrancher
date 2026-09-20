@@ -100,8 +100,8 @@ test('generic brancher records unknown actor fallback episodes in a local store'
       learningSource: 'custom-harness',
       learningCwd: directory
     });
-    const first = await brancher.step({ task: 'Read README.md', state: { phase: 0 } });
-    const second = await brancher.step({ task: 'Read README.md', state: { phase: 0 } });
+    const first = await brancher.step({ task: 'Read README.md', state: { phase: 0, credentials: { apiKey: 'apikey_1234567890123456' } } });
+    const second = await brancher.step({ task: 'Read README.md', state: { phase: 0, credentials: { apiKey: 'apikey_1234567890123456' } } });
     assert.equal(first.decision.source, 'actor');
     assert.equal(second.decision.source, 'actor');
     assert.equal(actorCalls, 2);
@@ -111,6 +111,11 @@ test('generic brancher records unknown actor fallback episodes in a local store'
     assert.equal(traces[0].outcome, 'success');
     assert.equal(traces[0].toolCalls[0].toolName, 'read');
     assert.equal(traces[0].toolCalls[0].output, 'contents of README.md');
+    assert.equal(traces[0].toolCalls[0].context.state.phase, 0);
+    assert.equal(traces[0].toolCalls[0].context.state.credentials.apiKey, '[REDACTED]');
+    assert.equal(traces[0].toolCalls[0].context.selection.source, 'actor');
+    assert.equal(traces[0].toolCalls[0].context.selection.candidateCount, 1);
+    assert.deepEqual(traces[0].toolCalls[0].context.selection.candidates, [{ tool: 'read', args: { path: 'README.md' } }]);
     assert.equal(traces[0].metadata.initialState.phase, 0);
     assert.equal(traces[0].routeResolution, 'uncertain');
     const routes = await store.readRoutes();

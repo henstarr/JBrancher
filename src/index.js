@@ -156,11 +156,11 @@ export function createJBrancher({
 
     const routeResolution = candidates.length === 0
       ? 'unmatched' : candidates.length === 1 ? 'uncertain' : 'ambiguous';
-    if (!actor) return { source: 'abstain', action: null, routeResolution,
+    if (!actor) return { source: 'abstain', action: null, routeResolution, candidates,
       reason: 'No rule, confident evaluator, or actor was available', evaluation, usage: [] };
     const result = await actor({ state: clone(state), task, history: clone(history), candidates: clone(candidates), signal });
     assertPlainAction(result?.action ?? null);
-    return { source: 'actor', action: clone(result?.action ?? null), routeResolution,
+    return { source: 'actor', action: clone(result?.action ?? null), routeResolution, candidates,
       evaluation, usage: clone(result?.usage ?? []) };
   }
 
@@ -169,13 +169,27 @@ export function createJBrancher({
       && (!learningOnlyFallback || decision.source === 'actor'));
   }
 
-  function recordAction(recorder, decision, stepNumber) {
+  function recordAction(recorder, decision, stepNumber, input = {}) {
     if (!recorder || !decision.action || typeof decision.action.tool !== 'string') return null;
     const toolCallId = `step-${stepNumber}`;
+    const candidates = Array.isArray(decision.candidates) ? decision.candidates.slice(0, 20) : [];
     recorder.recordToolCall({
       toolCallId,
       toolName: decision.action.tool,
-      input: decision.action.args
+      input: decision.action.args,
+      context: {
+        step: stepNumber,
+        state: clone(input.state ?? {}),
+        selection: {
+          source: decision.source,
+          routeResolution: decision.routeResolution,
+          candidateCount: candidates.length,
+          candidates,
+          ...(Number.isSafeInteger(decision.selected) ? { selected: decision.selected } : {}),
+          ...(typeof decision.score === 'number' ? { score: decision.score } : {}),
+          ...(Array.isArray(decision.scores) ? { scores: decision.scores.slice(0, 20) } : {})
+        }
+      }
     });
     return toolCallId;
   }
@@ -229,7 +243,7 @@ export function createJBrancher({
   async function executeStep(input = {}, recorder) {
     const decision = await decide(input);
     const actionRecorder = shouldRecord(decision) ? recorder : null;
-    const toolCallId = recordAction(actionRecorder, decision, input.step ?? 0);
+    const toolCallId = recordAction(actionRecorder, decision, input.step ?? 0, input);
     const event = { step: input.step ?? 0, state: clone(input.state ?? {}), decision: clone(decision) };
     if (decision.action !== null && execute) {
       try {

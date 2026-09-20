@@ -46,7 +46,8 @@ try {
 ```
 
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
-episodes. Inputs, outputs, and metadata are redacted by the learning store.
+episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
+by the learning store.
 There is no external database requirement.
 
 ## Promotion policy

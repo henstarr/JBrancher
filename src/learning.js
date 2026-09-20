@@ -25,13 +25,13 @@ export function redactText(value, maxChars = 2000) {
   return redacted.length > maxChars ? `${redacted.slice(0, maxChars)}…` : redacted;
 }
 
-export function redactValue(value, depth = 0) {
-  if (depth > 5) return '[TRUNCATED]';
+export function redactValue(value, depth = 0, maxDepth = 5) {
+  if (depth > maxDepth) return '[TRUNCATED]';
   if (typeof value === 'string') return redactText(value);
-  if (Array.isArray(value)) return value.slice(0, 50).map(item => redactValue(item, depth + 1));
+  if (Array.isArray(value)) return value.slice(0, 50).map(item => redactValue(item, depth + 1, maxDepth));
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).slice(0, 100).map(([key, item]) => [
-    key, SECRET_KEY.test(key) ? '[REDACTED]' : redactValue(item, depth + 1)
+    key, SECRET_KEY.test(key) ? '[REDACTED]' : redactValue(item, depth + 1, maxDepth)
   ]));
 }
 
@@ -140,7 +140,7 @@ function normalizeTrace(trace) {
     taskNormalized: normalizeTask(trace.task),
     cwd: redactText(trace.cwd || '', 1000),
     source: trace.source || 'pi',
-    toolCalls: redactValue(trace.toolCalls || []),
+    toolCalls: redactValue(trace.toolCalls || [], 0, 8),
     outcome: trace.outcome || 'unknown',
     safety: classifyTraceSafety(trace.toolCalls || []),
     routeResolution: ROUTE_RESOLUTIONS.has(routeResolution) ? routeResolution : 'unknown',
@@ -408,7 +408,7 @@ function datasetFingerprint(task, toolCalls) {
 export function traceToDatasetExample(trace) {
   if (!trace || typeof trace.task !== 'string') throw new TypeError('Dataset examples require a task');
   const task = redactText(trace.task, 4000);
-  const toolCalls = redactValue(trace.toolCalls || []);
+  const toolCalls = redactValue(trace.toolCalls || [], 0, 8);
   const safety = trace.safety || classifyTraceSafety(toolCalls);
   const routeResolution = ROUTE_RESOLUTIONS.has(trace.routeResolution)
     ? trace.routeResolution
@@ -476,7 +476,8 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
     episode.toolCalls.push({
       toolCallId: event.toolCallId,
       toolName: event.toolName,
-      input: event.input
+      input: event.input,
+      ...(event.context === undefined ? {} : { context: event.context })
     });
   }
 

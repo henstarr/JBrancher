@@ -188,8 +188,8 @@ frontier fallback → redacted dataset row → candidate on first success → re
 There is no “unknown route” error. A prompt with no registered match simply
 continues to Pi's frontier model. In learning mode, that entire episode is
 captured locally as a redacted JSONL example in `.jbrancher/dataset.jsonl`:
-the task, ordered tool calls, bounded outputs, outcome, safety label, and a
-stable train/validation/test split. Each example also records
+the task, ordered tool calls, bounded outputs, per-step state and routing
+context, outcome, safety label, and a stable train/validation/test split. Each example also records
 `routeResolution` (`unmatched`, `uncertain`, `ambiguous`, `failed`, or another explicit
 resolution), so unknown work can be separated from route failures during
 curation. This gives you a private, incrementally built dataset without an
