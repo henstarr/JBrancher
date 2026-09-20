@@ -790,10 +790,23 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     });
   }
 
+  async function recordRouteSuccess(id) {
+    return withLock(async () => {
+      const routes = await readRoutes();
+      const route = routes.find(item => item.id === id);
+      if (!route || route.status !== 'active') return route || null;
+      route.successfulReplays = Number.isSafeInteger(route.successfulReplays)
+        ? route.successfulReplays + 1 : 1;
+      route.lastReplayAt = new Date().toISOString();
+      await writeRoutesUnlocked(routes);
+      return route;
+    });
+  }
+
   return {
     directory, tracesPath, routesPath, datasetPath, preferencesPath,
     appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes,
-    writeDataset, refreshCandidates, promote, recordRouteFailure,
+    writeDataset, refreshCandidates, promote, recordRouteFailure, recordRouteSuccess,
     readPreferences, writePreferences, findPreference, recordPreferenceSuccess,
     recordPreferenceFailure
   };

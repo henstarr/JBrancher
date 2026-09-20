@@ -76,6 +76,7 @@ try {
     syntheticProviderTokens: { baseline: baselineTokens, actual: actualTokens, saved: baselineTokens - actualTokens },
     learnedReplays: learnedRows,
     activeRoutes: routes.filter(route => route.status === 'active').length,
+    successfulReplays: snapshot.successfulReplays,
     datasetExamples: snapshot.traces,
     resolutions: snapshot.resolutions,
     outcomes: snapshot.outcomes,
@@ -85,6 +86,7 @@ try {
   if (shouldAssert) {
     assert.ok(report.activeRoutes >= tasks.length);
     assert.ok(report.learnedReplays >= tasks.length * (repetitions - 2));
+    assert.ok(report.successfulReplays >= report.learnedReplays);
     assert.equal(report.outcomes.success, report.actualFrontierCalls);
     assert.ok(report.frontierCallReduction >= 1 / 3);
   }

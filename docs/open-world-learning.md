@@ -58,7 +58,10 @@ postcondition verifier and explicitly enables verified promotion.
 
 Use `await learner.learn()` after importing or editing traces, and
 `await learner.snapshot()` to expose dataset demand, outcome, route-resolution,
-candidate, active-route, and quarantine counts in a UI or benchmark report.
+candidate, active-route, quarantine, and successful-replay counts in a UI or
+benchmark report. Active route records also retain `successfulReplays` and
+`lastReplayAt`, so a local harness can measure whether a promoted shortcut is
+actually earning reuse rather than merely accumulating observations.
 
 No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the

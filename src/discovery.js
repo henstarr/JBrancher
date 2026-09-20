@@ -140,6 +140,7 @@ export function createOpenWorldLearner({
       activeRoutes: routes.filter(route => route.status === 'active').length,
       candidates: routes.filter(route => route.status === 'candidate').length,
       quarantinedRoutes: routes.filter(route => route.status === 'quarantined').length,
+      successfulReplays: routes.reduce((total, route) => total + (Number.isSafeInteger(route.successfulReplays) ? route.successfulReplays : 0), 0),
       outcomes,
       resolutions
     };

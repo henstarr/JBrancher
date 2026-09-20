@@ -317,6 +317,9 @@ no longer legal. `learningOutcome` is optional; when supplied, it is the
 harness-owned postcondition that decides whether an episode is eligible for
 promotion.
 
+Active routes retain local replay telemetry (`successfulReplays` and
+`lastReplayAt`) so repeated reuse can be measured without a hosted service.
+
 If a learned step executes but the postcondition rejects it, JBrancher
 quarantines the route and gives the frontier actor a recovery turn in the same
 task. The recovery episode is retained locally, so stale shortcuts add failure

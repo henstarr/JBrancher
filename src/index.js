@@ -221,6 +221,11 @@ export function createJBrancher({
     return undefined;
   }
 
+  async function recordLearnedSuccess(decision) {
+    if (decision?.source !== 'learned' || typeof learningStore?.recordRouteSuccess !== 'function') return;
+    await learningStore.recordRouteSuccess(decision.routeId).catch(() => {});
+  }
+
   async function executeStep(input = {}, recorder) {
     const decision = await decide(input);
     const actionRecorder = shouldRecord(decision) ? recorder : null;
@@ -295,6 +300,9 @@ export function createJBrancher({
           learnedRouteQuarantined: true,
           fallbackAfterLearnedRoute: event.decision.routeId
         };
+      }
+      if (event.decision.source === 'learned' && (!outcome || outcome === 'success')) {
+        await recordLearnedSuccess(event.decision);
       }
       await finishRecorder(recorder, {
         recordEpisode,
@@ -408,6 +416,7 @@ export function createJBrancher({
             learnedReplayOutcome: replayOutcome
           };
         } else {
+          await recordLearnedSuccess({ source: 'learned', routeId: learnedRun.learningRouteId });
           return learnedRun;
         }
       }
