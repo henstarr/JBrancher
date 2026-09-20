@@ -337,6 +337,75 @@ export function buildDataset(traces, { includeUnknown = true } = {}) {
     .map(traceToDatasetExample);
 }
 
+function outputPreview(value) {
+  if (typeof value === 'string') return redactText(value, 500);
+  if (!Array.isArray(value)) return undefined;
+  const text = value
+    .filter(item => item?.type === 'text' && typeof item.text === 'string')
+    .map(item => item.text)
+    .join('\n');
+  return text ? redactText(text, 500) : undefined;
+}
+
+/**
+ * Record one harness episode using the same lifecycle shape as Pi.
+ * Adapters can feed tool events here without depending on Pi internals.
+ */
+export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness', metadata = {} } = {}) {
+  if (!store || typeof store.appendTrace !== 'function') throw new TypeError('A learning store is required');
+  if (typeof task !== 'string') throw new TypeError('A task string is required');
+  const episode = {
+    task,
+    cwd,
+    source,
+    startedAt: new Date().toISOString(),
+    toolCalls: []
+  };
+  let finished = false;
+  let saved;
+
+  function recordToolCall(event = {}) {
+    if (finished || typeof event.toolName !== 'string') return;
+    episode.toolCalls.push({
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      input: event.input
+    });
+  }
+
+  function recordToolResult(event = {}) {
+    if (finished) return;
+    const call = episode.toolCalls.find(item => item.toolCallId === event.toolCallId);
+    if (!call) return;
+    call.ok = !event.isError;
+    call.output = outputPreview(event.output ?? event.content);
+  }
+
+  async function finish({ outcome, metadata: finishMetadata = {} } = {}) {
+    if (finished) return saved;
+    const resolvedOutcome = outcome || (episode.toolCalls.length > 0
+      && episode.toolCalls.every(call => call.ok === true) ? 'success' : 'unknown');
+    saved = await store.appendTrace({
+      ...episode,
+      outcome: resolvedOutcome,
+      metadata: { ...metadata, ...finishMetadata }
+    });
+    finished = true;
+    return saved;
+  }
+
+  return {
+    task: episode.task,
+    cwd: episode.cwd,
+    source: episode.source,
+    startedAt: episode.startedAt,
+    toolCalls: episode.toolCalls,
+    recordToolCall,
+    recordToolResult,
+    finish
+  };
+}
+
 export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl', routeFile = 'routes.json', datasetFile = 'dataset.jsonl' } = {}) {
   if (typeof directory !== 'string' || !directory) throw new TypeError('A learning directory is required');
   const tracesPath = join(directory, traceFile);
@@ -345,10 +414,18 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
 
   async function ensure() { await mkdir(directory, { recursive: true }); }
 
+  async function appendDatasetExample(trace) {
+    await ensure();
+    const example = traceToDatasetExample(trace);
+    await appendFile(datasetPath, `${JSON.stringify(example)}\n`, 'utf8');
+    return example;
+  }
+
   async function appendTrace(trace) {
     await ensure();
     const record = normalizeTrace(trace);
     await appendFile(tracesPath, `${JSON.stringify(record)}\n`, 'utf8');
+    await appendDatasetExample(record);
     return record;
   }
 
@@ -413,5 +490,5 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     return route;
   }
 
-  return { directory, tracesPath, routesPath, datasetPath, appendTrace, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote };
+  return { directory, tracesPath, routesPath, datasetPath, appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes, writeDataset, refreshCandidates, promote };
 }

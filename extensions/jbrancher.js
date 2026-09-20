@@ -1,7 +1,7 @@
 import { access, readFile as readTextFile } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { createLocalLearningStore, createLearnedRoutes } from '../src/learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes } from '../src/learning.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
 
@@ -161,13 +161,12 @@ export default async function jbrancherPiExtension(pi) {
   pi.on('input', async (event, ctx) => {
     if (event.source === 'extension' || !runtime) return { action: 'continue' };
     if (runtime.learning.enabled) {
-      runtime.learning.pending = {
+      runtime.learning.pending = createEpisodeRecorder({
+        store: runtime.learning.store,
         task: event.text,
         cwd: ctx.cwd,
-        source: event.source || 'interactive',
-        startedAt: new Date().toISOString(),
-        toolCalls: []
-      };
+        source: event.source || 'interactive'
+      });
     }
     let outcome;
     try {
@@ -216,21 +215,13 @@ export default async function jbrancherPiExtension(pi) {
   pi.on('tool_call', async event => {
     const pending = runtime?.learning?.pending;
     if (!pending) return;
-    pending.toolCalls.push({
-      toolCallId: event.toolCallId,
-      toolName: event.toolName,
-      input: event.input
-    });
+    pending.recordToolCall(event);
   });
 
   pi.on('tool_result', async event => {
     const pending = runtime?.learning?.pending;
-    const call = pending?.toolCalls.find(item => item.toolCallId === event.toolCallId);
-    if (!call) return;
-    call.ok = !event.isError;
-    call.output = Array.isArray(event.content)
-      ? event.content.filter(item => item?.type === 'text').map(item => item.text).join('\n').slice(0, 500)
-      : undefined;
+    if (!pending) return;
+    pending.recordToolResult(event);
   });
 
   pi.on('agent_end', async (_event, ctx) => {
@@ -242,8 +233,7 @@ export default async function jbrancherPiExtension(pi) {
     const outcome = pending.toolCalls.length > 0 && pending.toolCalls.every(call => call.ok === true)
       ? 'success' : 'unknown';
     try {
-      await learning.store.appendTrace({ ...pending, outcome, metadata: { mode } });
-      await learning.store.writeDataset();
+      await pending.finish({ outcome, metadata: { mode } });
       if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
         const routes = await learning.store.refreshCandidates({
           minimumObservations: Number(config.minimumObservations || 2),

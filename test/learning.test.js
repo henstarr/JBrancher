@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText } from '../src/learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -16,6 +16,7 @@ test('local learning stores redacted traces and proposes repeated read routes', 
       outcome: 'success'
     };
     await store.appendTrace(trace);
+    assert.equal((await readFile(store.datasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
     await store.appendTrace({ ...trace, toolCalls: [{ ...trace.toolCalls[0], toolCallId: '2' }] });
     await store.appendTrace({ ...trace, outcome: 'unknown' });
 
@@ -69,6 +70,23 @@ test('learning can replay a repeated read-only workflow with multiple steps', as
       readFile: async path => `contents of ${path}`
     });
     assert.deepEqual(result.result, ['contents of package.json', 'contents of jbrancher.config.js']);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('the learning recorder is harness-neutral and writes one episode dataset row', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const recorder = createEpisodeRecorder({ store, task: 'inspect package.json', source: 'custom-harness' });
+    recorder.recordToolCall({ toolCallId: 'call-1', toolName: 'read', input: { path: 'package.json' } });
+    recorder.recordToolResult({ toolCallId: 'call-1', isError: false, content: [{ type: 'text', text: 'package contents' }] });
+    const saved = await recorder.finish();
+    assert.equal(saved.source, 'custom-harness');
+    assert.equal(saved.outcome, 'success');
+    assert.equal((await store.readTraces()).length, 1);
+    assert.equal((await readFile(store.datasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

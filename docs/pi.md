@@ -162,6 +162,22 @@ JBrancher can also promote a guarded path template. A later request such as
 the template rejects write/delete language, traversal, absolute paths, and
 common secret/key files.
 
+The trace layer is harness-neutral. An adapter for another local harness can
+use the same store without importing the Pi extension:
+
+```js
+import { createEpisodeRecorder, createLocalLearningStore } from 'jbrancher/learning';
+
+const store = createLocalLearningStore({ directory: '.jbrancher' });
+const episode = createEpisodeRecorder({ store, task, source: 'my-harness' });
+episode.recordToolCall({ toolCallId, toolName, input });
+episode.recordToolResult({ toolCallId, isError, content });
+await episode.finish();
+```
+
+The adapter only supplies lifecycle events; JBrancher owns redaction, local
+dataset append, candidate mining, and promotion policy.
+
 Run the local replay benchmark:
 
 ```sh
