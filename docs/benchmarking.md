@@ -68,6 +68,16 @@ reports observed input/output tokens and evaluator calls, and removes its
 temporary data afterward. It is a live usage benchmark, not an official
 SWE-bench resolution result.
 
+The latest checked-in live sample is summarized in
+[docs/live-learning-2026-09-20.md](live-learning-2026-09-20.md). It reduced
+12 Jev calls to 6 across three prompts while retaining 100% learned-route
+coverage. Install the official evaluator wrapper separately when preparing a
+Docker-backed run:
+
+```sh
+python -m pip install -r benchmarks/requirements.txt
+```
+
 The fixture compares three controls:
 
 - `actor-only`: the existing actor chooses every step.

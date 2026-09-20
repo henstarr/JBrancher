@@ -45,6 +45,8 @@
   cache hits as new evidence.
 - Add a bounded live learning benchmark that reports real Jev usage and local
   route coverage without persisting benchmark data or exposing credentials.
+- Check in the first three-prompt live learning report and pin the optional
+  SWE-bench evaluator dependency for reproducible official runs.
 - Revalidate learned multi-step workflows against the current harness
   postcondition and capture frontier recovery after a quarantined Pi route.
 - Add opt-in postcondition-verified promotion for generic harness workflows,
