@@ -36,13 +36,28 @@ JBRANCHER_LEARNING=1 npx jbrancher wrap codex --prompt "Check git status" --max-
 ```
 
 Started and completed command events are joined into one redacted episode. The
-wrapper remains shadow-only: Codex permissions, execution, and output are not
-changed.
+wrapper remains shadow-only in its default mode: Codex permissions, execution,
+and output are not changed.
+
+For explicit prompts, adaptive mode can replay an active local read-only route
+before launching Codex:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap codex --mode adaptive \
+  --prompt "read README.md" --max-evaluations 0 -- --sandbox read-only --ephemeral
+```
+
+Only exact or safe path-parameterized routes with repeated successful evidence
+are eligible. A miss launches Codex normally and the resulting command episode
+is captured for future learning. A local hit emits a minimal JSONL transcript
+with an agent message and zero provider usage; consumers should treat the
+`jbrancher adaptive replay` diagnostic as the source of the local shortcut.
 
 The wrapper does not observe MCP calls, web searches, or file-change items. A zero
 observed count is not proof of integration. Native hooks have a separate review/trust
 workflow; this adapter intentionally uses stream observation instead. Execution may
-already have started when a score arrives. `actorCallsAvoided` is always zero.
+already have started when a score arrives. Shadow mode has
+`actorCallsAvoided: 0`; adaptive replay reports the local shortcut on stderr.
 
 ## Live validation: 2026-09-18 (local date)
 

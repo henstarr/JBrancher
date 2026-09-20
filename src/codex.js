@@ -5,22 +5,24 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createJevEvaluator } from './jev.js';
 import { createEpisodeRecorder, createLocalLearningStore, refreshAndPromoteReadOnly } from './learning.js';
+import { replayLearnedTask } from './replay.js';
 
 export function parseCodexArgs(args) {
   if (args.shift() !== 'codex') throw new Error('Expected codex');
-  let prompt, maxEvaluations = 25;
+  let prompt, maxEvaluations = 25, mode = 'shadow';
   while (args.length && args[0] !== '--') {
     const option = args.shift();
     if (option === '--prompt') prompt = args.shift();
     else if (option === '--max-evaluations') maxEvaluations = Number(args.shift());
     else if (option === '--mode') {
-      if (args.shift() !== 'shadow') throw new Error('Only shadow mode is supported.');
+      mode = args.shift();
+      if (!['shadow', 'adaptive'].includes(mode)) throw new Error('Mode must be shadow or adaptive.');
     } else throw new Error('Use --prompt "task"; put Codex exec options after --.');
   }
   if (!prompt?.trim()) throw new Error('Codex wrapper requires --prompt "task". Interactive sessions and resume are not supported.');
   if (!Number.isSafeInteger(maxEvaluations) || maxEvaluations < 0 || maxEvaluations > 1000) throw new Error('Invalid evaluation budget (0–1000).');
   if (args[0] === '--') args.shift();
-  return { prompt, maxEvaluations, args };
+  return { prompt, maxEvaluations, args, mode };
 }
 
 // Stream observation only: never feeds a score back into Codex.
@@ -109,20 +111,40 @@ export function createEventDecoder(observe, limit = 65536) {
 export async function wrapCodex({ prompt, args = [], maxEvaluations = 25, env = process.env,
   executable = process.platform === 'win32' ? 'codex.exe' : 'codex', evaluate,
   logDirectory = join(homedir(), '.jbrancher', 'sessions'), output = process.stdout,
-  learning = env.JBRANCHER_LEARNING === '1', learningDirectory = join(process.cwd(), '.jbrancher') } = {}) {
+  learning = env.JBRANCHER_LEARNING === '1', learningDirectory = join(process.cwd(), '.jbrancher'),
+  mode = 'shadow' } = {}) {
   if (!prompt?.trim()) throw new Error('A prompt is required.');
+  if (!['shadow', 'adaptive'].includes(mode)) throw new Error('Mode must be shadow or adaptive.');
+  if (mode === 'adaptive') {
+    const replay = await replayLearnedTask({ task: prompt, directory: learningDirectory, cwd: process.cwd() });
+    if (replay.handled) {
+      const threadId = `jbrancher-${randomUUID()}`;
+      const itemId = `${threadId}-result`;
+      output.write(`${JSON.stringify({ type: 'thread.started', thread_id: threadId })}\n`);
+      output.write(`${JSON.stringify({ type: 'item.completed', item: {
+        id: itemId, type: 'agent_message', text: typeof replay.result === 'string'
+          ? replay.result : JSON.stringify(replay.result, null, 2)
+      } })}\n`);
+      output.write(`${JSON.stringify({ type: 'turn.completed', usage: {
+        input_tokens: 0, output_tokens: 0, cached_input_tokens: 0
+      } })}\n`);
+      console.error(`JBrancher adaptive replay: ${replay.routeId}`);
+      return 0;
+    }
+  }
   if (maxEvaluations > 0 && !evaluate && !env.TYPESAFE_API_KEY) throw new Error('Set TYPESAFE_API_KEY in .env, or use --max-evaluations 0.');
   const evaluator = maxEvaluations === 0 ? undefined : evaluate ?? createJevEvaluator({
     apiKey: env.TYPESAFE_API_KEY, model: env.JBRANCHER_MODEL ?? 'jev-1.13.0', timeoutMs: 3000 });
   await mkdir(logDirectory, { recursive: true, mode: 0o700 });
   const logPath = join(logDirectory, `${randomUUID()}.jsonl`);
   await writeFile(logPath, '', { flag: 'wx', mode: 0o600 });
-  const learningStore = learning ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
+  const learningStore = (learning || mode === 'adaptive')
+    ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
   const observer = createCodexObserver({ prompt, evaluate: evaluator, maxEvaluations,
     record: row => appendFile(logPath, JSON.stringify(row) + '\n'), learningStore });
   const childEnv = { ...env };
   delete childEnv.TYPESAFE_API_KEY;
-  console.error(`JBrancher Codex shadow: up to ${maxEvaluations} evaluations. Scores: ${logPath}`);
+  console.error(`JBrancher Codex ${mode}: up to ${maxEvaluations} evaluations. Scores: ${logPath}`);
   // Prompt via stdin avoids positional ambiguity and never inherits unrelated piped input.
   const child = spawn(executable, ['exec', ...args, '--json', '-'], { env: childEnv, stdio: ['pipe', 'pipe', 'inherit'], shell: false });
   const decode = createEventDecoder(event => observer.observe(event));
@@ -145,7 +167,7 @@ export async function wrapCodex({ prompt, args = [], maxEvaluations = 25, env = 
   } finally {
     process.off('SIGINT', interrupt); process.off('SIGTERM', terminate); output.off('drain', drain);
     await observer.close();
-    await appendFile(logPath, JSON.stringify({ harness: 'codex', mode: 'shadow', summary: observer.stats, actorCallsAvoided: 0 }) + '\n');
-    console.error(`JBrancher Codex shadow: ${JSON.stringify(observer.stats)}`);
+    await appendFile(logPath, JSON.stringify({ harness: 'codex', mode, summary: observer.stats, actorCallsAvoided: 0 }) + '\n');
+    console.error(`JBrancher Codex ${mode}: ${JSON.stringify(observer.stats)}`);
   }
 }

@@ -73,7 +73,8 @@ test('event decoder handles split, malformed, and oversized JSONL', () => {
 
 test('Codex CLI options require an explicit task and validate budget', () => {
   assert.deepEqual(parseCodexArgs(['codex', '--prompt', 'read README', '--max-evaluations', '1', '--', '--sandbox', 'read-only']),
-    { prompt: 'read README', maxEvaluations: 1, args: ['--sandbox', 'read-only'] });
+    { prompt: 'read README', maxEvaluations: 1, args: ['--sandbox', 'read-only'], mode: 'shadow' });
+  assert.equal(parseCodexArgs(['codex', '--prompt', 'read README', '--mode', 'adaptive']).mode, 'adaptive');
   for (const args of [[], ['--prompt', ''], ['--prompt', 'x', '--mode', 'guard'], ['--prompt', 'x', '--max-evaluations', '-1']]) {
     assert.throws(() => parseCodexArgs(['codex', ...args]));
   }
@@ -87,4 +88,35 @@ test('Codex missing executable fails cleanly and writes a zero summary', async (
     const row = JSON.parse(await readFile(join(directory, files[0]), 'utf8'));
     assert.equal(row.summary.observed, 0);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('Codex adaptive mode replays a promoted local read without launching Codex', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-codex-replay-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    await store.writeRoutes([{
+      schemaVersion: 1,
+      id: 'learned-read-readme',
+      status: 'active',
+      matcher: { type: 'normalized-exact', value: 'read readme.md' },
+      action: { toolName: 'read', input: { path: 'README.md' } },
+      safety: 'read-only',
+      observations: 2
+    }]);
+    let stdout = '';
+    const exitCode = await wrapCodex({
+      prompt: 'read README.md',
+      mode: 'adaptive',
+      maxEvaluations: 0,
+      learningDirectory: directory,
+      executable: join(directory, 'must-not-launch'),
+      output: { write(value) { stdout += value; return true; } },
+      logDirectory: directory
+    });
+    assert.equal(exitCode, 0);
+    assert.match(stdout, /agent_message/);
+    assert.match(stdout, /README/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

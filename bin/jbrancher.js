@@ -10,8 +10,8 @@ import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
 import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 
 function printHelp() {
-  console.log('Codex batch: jbrancher wrap codex --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
-  console.log('Claude Code: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
+  console.log('Codex batch: jbrancher wrap codex --mode shadow|adaptive --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
+  console.log('Claude Code: jbrancher wrap claude [--mode shadow|adaptive] [--max-evaluations 25] -- [Claude arguments]');
   console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only]\n  Writes dataset.jsonl without changing route status.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787\n  POST /v1/decide with task, state, history, and candidates\n  GET  /health or /stats\n`);
 }
 

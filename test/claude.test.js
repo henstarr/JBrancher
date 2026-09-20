@@ -91,7 +91,8 @@ test('Claude learning hooks record a canonical local episode without changing ho
 
 test('wrapper separates Claude arguments and rejects unsupported modes and conflicting settings', () => {
   assert.deepEqual(parseClaudeArgs(['claude', '--mode', 'shadow', '--max-evaluations', '0', '--', '-p', 'hello']),
-    { args: ['-p', 'hello'], maxEvaluations: 0 });
+    { args: ['-p', 'hello'], maxEvaluations: 0, mode: 'shadow' });
+  assert.equal(parseClaudeArgs(['claude', '--mode', 'adaptive', '--', '-p', 'hello']).mode, 'adaptive');
   for (const args of [['claude', '--mode', 'guard'], ['claude', '--max-evaluations', '-1'],
     ['claude', '--', '--settings=x'], ['claude', '--', '--bare']]) {
     assert.throws(() => parseClaudeArgs(args));

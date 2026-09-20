@@ -14,6 +14,22 @@ cleans up its temporary settings on normal exit or launch failure. No global or
 project Claude configuration is edited. Native Windows `claude.exe` is supported;
 legacy npm command shims are not a tested launch target.
 
+## Adaptive local replay
+
+For explicit non-interactive `-p`/`--print` prompts, opt into adaptive mode:
+
+```sh
+JBRANCHER_LEARNING=1 npx jbrancher wrap claude --mode adaptive --max-evaluations 0 -- \
+  -p "read README.md"
+```
+
+Adaptive mode first checks the project-local `.jbrancher/routes.json`. It can
+execute only an active, sufficiently observed, read-only exact or safe
+path-parameterized route. A hit prints the local result and does not launch
+Claude. A miss launches Claude normally and records the fallback episode for
+future learning. Interactive prompts and side-effecting routes always stay on
+the frontier path.
+
 Current-prompt context is held in memory for up to 32 prompt IDs. Events with no
 matching prompt are skipped, including some resumed or subagent events. At most
 two evaluations run concurrently, with a three-second provider timeout and a
@@ -67,12 +83,11 @@ each supported operating system before declaring general compatibility.
 
 ## Product boundary
 
-This is an observation integration. Every proposed tool has already been selected
-by Claude, so `actorCallsAvoided` is always zero. Scores use incomplete context
-and do not establish that an action is safe, authorized, or optimal. Guard mode
-and accelerated orchestration are not implemented. An Agent SDK runner alone
-does not automatically expose control over every model turn; acceleration needs
-an explicit, tested decision boundary before inference.
+Shadow mode remains observation-only and reports `actorCallsAvoided: 0`. Adaptive
+mode adds a deliberately narrow preflight boundary for local read-only replay;
+it does not approve Claude tools or control arbitrary model turns. Scores use
+incomplete context and do not establish that an action is safe, authorized, or
+optimal. Side-effecting acceleration is not implemented.
 
 Official contracts: [Claude hooks](https://code.claude.com/docs/en/hooks) and
 [CLI settings](https://code.claude.com/docs/en/cli-reference).

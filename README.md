@@ -48,6 +48,17 @@ npx jbrancher wrap claude --mode shadow --max-evaluations 10 -- --resume
 npx jbrancher wrap claude --max-evaluations 0 -- --version
 ```
 
+After local learning has promoted a safe repeated route, an explicit print-mode
+prompt can try the local fast path first:
+
+```sh
+npx jbrancher wrap claude --mode adaptive --max-evaluations 0 -- -p "read README.md"
+```
+
+Adaptive replay is limited to active, repeated, read-only exact/path routes. A
+miss launches Claude normally; writes and interactive sessions remain on the
+frontier path.
+
 Requires a native Claude Code installation supporting HTTP hooks and `--settings`.
 Claude flags follow `--`. The wrapper uses a temporary settings file and an
 authenticated loopback hook server; global and project settings files are never edited.
@@ -87,6 +98,16 @@ This launches `codex exec --json`, preserving its JSONL stdout and exit status.
 Command events are scored in the background; permissions, hook trust, and config
 files are unchanged. Only command execution is observed—not MCP calls, file changes,
 or interactive/resumed sessions. This is shadow telemetry, not a speedup or tool gate.
+
+For an explicit batch prompt, adaptive mode tries an active local read-only route
+before launching Codex:
+
+```sh
+npx jbrancher wrap codex --mode adaptive --prompt "read README.md" --max-evaluations 0 -- --sandbox read-only --ephemeral
+```
+
+A local hit emits a minimal JSONL agent response with zero provider usage. A miss
+falls through to Codex and is recorded for future learning.
 
 To record Codex command episodes in the same local learning dataset, use:
 

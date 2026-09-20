@@ -6,6 +6,7 @@ import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { createJevEvaluator } from './jev.js';
 import { createEpisodeRecorder, createLocalLearningStore, refreshAndPromoteReadOnly } from './learning.js';
+import { replayLearnedTask } from './replay.js';
 
 function learningToolCall(input) {
   const toolName = typeof input?.tool_name === 'string' ? input.tool_name : '';
@@ -28,10 +29,12 @@ function learningToolCall(input) {
 export function parseClaudeArgs(args) {
   if (args.shift() !== 'claude') throw new Error('Usage: jbrancher wrap claude [--mode shadow] [--max-evaluations 25] -- [Claude arguments]');
   let maxEvaluations = 25;
+  let mode = 'shadow';
   while (args.length && args[0] !== '--') {
     const option = args.shift();
     if (option === '--mode') {
-      if (args.shift() !== 'shadow') throw new Error('Only shadow mode is supported.');
+      mode = args.shift();
+      if (!['shadow', 'adaptive'].includes(mode)) throw new Error('Mode must be shadow or adaptive.');
     } else if (option === '--max-evaluations') {
       maxEvaluations = Number(args.shift());
     } else throw new Error('Unknown wrapper option. Put Claude arguments after --.');
@@ -43,7 +46,14 @@ export function parseClaudeArgs(args) {
   if (args.some(arg => /^(--settings|--bare|--safe-mode)(=|$)/.test(arg))) {
     throw new Error('The wrapper owns --settings; --bare and --safe-mode disable its hooks.');
   }
-  return { args, maxEvaluations };
+  return { args, maxEvaluations, mode };
+}
+
+function claudePrompt(args = []) {
+  for (let index = 0; index < args.length - 1; index++) {
+    if (args[index] === '-p' || args[index] === '--print') return args[index + 1];
+  }
+  return null;
 }
 
 // HTTP callbacks always return {}. Scores never become permission decisions.
@@ -170,7 +180,19 @@ export async function startClaudeShadow({ evaluate, maxEvaluations = 25, record 
 export async function wrapClaude({ args = [], maxEvaluations = 25,
   env = process.env, executable = process.platform === 'win32' ? 'claude.exe' : 'claude',
   evaluate, logDirectory = join(homedir(), '.jbrancher', 'sessions'), learning = env.JBRANCHER_LEARNING === '1',
-  learningDirectory = join(process.cwd(), '.jbrancher') } = {}) {
+  learningDirectory = join(process.cwd(), '.jbrancher'), mode = 'shadow' } = {}) {
+  if (!['shadow', 'adaptive'].includes(mode)) throw new Error('Mode must be shadow or adaptive.');
+  if (mode === 'adaptive') {
+    const prompt = claudePrompt(args);
+    if (prompt) {
+      const replay = await replayLearnedTask({ task: prompt, directory: learningDirectory, cwd: process.cwd() });
+      if (replay.handled) {
+        console.error(`JBrancher adaptive replay: ${replay.routeId}`);
+        process.stdout.write(typeof replay.result === 'string' ? replay.result : `${JSON.stringify(replay.result, null, 2)}\n`);
+        return 0;
+      }
+    }
+  }
   if (maxEvaluations > 0 && !evaluate && !env.TYPESAFE_API_KEY) {
     throw new Error('Set TYPESAFE_API_KEY in .env, or use --max-evaluations 0 for local hook diagnostics.');
   }
@@ -181,7 +203,8 @@ export async function wrapClaude({ args = [], maxEvaluations = 25,
   const logPath = join(logDirectory, `${randomUUID()}.jsonl`);
   await writeFile(logPath, '', { mode: 0o600, flag: 'wx' });
   const temporary = await mkdtemp(join(tmpdir(), 'jbrancher-claude-'));
-  const learningStore = learning ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
+  const learningStore = (learning || mode === 'adaptive')
+    ? createLocalLearningStore({ directory: learningDirectory }) : undefined;
   let service;
   try {
     service = await startClaudeShadow({ evaluate: evaluator, maxEvaluations,
@@ -190,7 +213,7 @@ export async function wrapClaude({ args = [], maxEvaluations = 25,
     await writeFile(settingsPath, JSON.stringify(service.settings), { mode: 0o600 });
     const childEnv = { ...env };
     delete childEnv.TYPESAFE_API_KEY;
-    console.error(`JBrancher shadow: up to ${maxEvaluations} TypeSafe evaluations. Scores: ${logPath}`);
+    console.error(`JBrancher ${mode}: up to ${maxEvaluations} TypeSafe evaluations. Scores: ${logPath}`);
     const child = spawn(executable, ['--settings', settingsPath, ...args], { stdio: 'inherit', env: childEnv, shell: false });
     const interrupt = () => child.kill('SIGINT');
     const terminate = () => child.kill('SIGTERM');
@@ -209,8 +232,9 @@ export async function wrapClaude({ args = [], maxEvaluations = 25,
     try {
       if (service) {
         await service.close();
-        await appendFile(logPath, JSON.stringify({ mode: 'shadow', summary: service.stats, actorCallsAvoided: 0 }) + '\n');
-        console.error(`JBrancher shadow: ${JSON.stringify(service.stats)}`);
+        await appendFile(logPath, JSON.stringify({ mode, summary: service.stats,
+          actorCallsAvoided: 0 }) + '\n');
+        console.error(`JBrancher ${mode}: ${JSON.stringify(service.stats)}`);
       }
     } finally {
       await rm(join(temporary, 'settings.json'), { force: true });

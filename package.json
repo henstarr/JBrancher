@@ -40,6 +40,7 @@
     "./context": "./src/context.js",
     "./jev": "./src/jev.js",
     "./learning": "./src/learning.js",
+    "./replay": "./src/replay.js",
     "./discovery": "./src/discovery.js",
     "./pi": "./src/pi.js",
     "./server": "./src/server.js"
