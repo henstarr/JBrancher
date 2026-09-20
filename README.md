@@ -419,6 +419,12 @@ For end-to-end evidence, use the same agent, model, task set, Docker image, time
 3. SWE-bench Lite or Verified after the agent can emit valid prediction patches.
 
 See [docs/benchmarking.md](docs/benchmarking.md) for the controls, metrics, and commands.
+When you have a real prediction file, run the official evaluator through the
+included wrapper:
+
+```sh
+npm run bench:swebench -- --predictions predictions/jbrancher.jsonl --dry-run
+```
 
 ## Project plan
 

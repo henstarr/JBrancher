@@ -146,6 +146,22 @@ python -m swebench.harness.run_evaluation \
   --run_id jbrancher-smoke
 ```
 
+JBrancher includes a thin command wrapper for the same official evaluator:
+
+```sh
+npm run bench:swebench -- \
+  --predictions predictions/jbrancher.jsonl \
+  --dataset princeton-nlp/SWE-bench_Lite \
+  --instance-ids astropy__astropy-14539 \
+  --max-workers 2 \
+  --run-id jbrancher-smoke
+```
+
+Use `--dry-run` to inspect the exact Python command without starting Docker.
+Use `--modal` when running the official cloud evaluation path. The wrapper does
+not generate patches or alter predictions; it only standardizes invocation and
+keeps JBrancher telemetry separate from the evaluator input.
+
 The prediction-generation loop should log routing telemetry separately from the patch. The official harness remains the source of truth for resolution rate.
 
 ## What would count as a win?

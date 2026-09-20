@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
+import { createLocalLearningStore } from '../src/learning.js';
 import jbrancherPiExtension from '../extensions/jbrancher.js';
 
 test('Pi router executes one deterministic match without frontier evaluation', async () => {
@@ -167,6 +168,46 @@ test('Pi learning mode promotes a path template and handles a new file request',
     const handled = await handlers.get('input')({ text: 'inspect src-index.js', source: 'interactive' }, ctx);
     assert.deepEqual(handled, { action: 'handled' });
     assert.match(messages.at(-1).content, /export default true/);
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Pi quarantines a learned route that fails and avoids an empty fallback trace', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-quarantine-test-'));
+  const store = createLocalLearningStore({ directory: join(directory, '.jbrancher') });
+  await store.writeRoutes([{
+    schemaVersion: 1,
+    id: 'learned-stale-read',
+    status: 'active',
+    matcher: { type: 'normalized-exact', value: 'read missing.txt' },
+    action: { toolName: 'read', input: { path: 'missing.txt' } },
+    safety: 'read-only',
+    observations: 2
+  }]);
+  const handlers = new Map();
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage() {},
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    const result = await handlers.get('input')({ text: 'read missing.txt', source: 'interactive' }, ctx);
+    assert.deepEqual(result, { action: 'continue' });
+    assert.equal((await store.readRoutes())[0].status, 'quarantined');
   } finally {
     if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
     else process.env.JBRANCHER_PI_MODE = previousMode;
