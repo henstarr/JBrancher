@@ -45,6 +45,8 @@ function readJson(request) {
  *
  * This is intentionally not an OpenAI-compatible model proxy. A caller must
  * submit a bounded candidate set so the service cannot invent executable work.
+ * An omitted or empty candidate set is also valid: it represents open-world
+ * work and returns an abstention for the caller's frontier actor.
  */
 export function createJBrancherServer({
   apiKey = process.env.TYPESAFE_API_KEY,
@@ -187,12 +189,13 @@ export function createJBrancherServer({
 
       stats.requestsTotal += 1;
       const input = await readJson(request);
-      if (!Array.isArray(input.candidates) || input.candidates.length === 0) {
-        return sendJson(response, 400, { error: 'candidates must be a non-empty array' });
+      if (input.candidates !== undefined && !Array.isArray(input.candidates)) {
+        return sendJson(response, 400, { error: 'candidates must be an array when provided' });
       }
+      const candidates = input.candidates ?? [];
 
       const brancher = createJBrancher({
-        getCandidates: () => input.candidates,
+        getCandidates: () => candidates,
         learningStore: learner?.store,
         learningSource,
         learningCwd,

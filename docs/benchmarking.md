@@ -283,6 +283,11 @@ currently ship a Python `BaseAgent` class; the Harbor adapter remains harness-
 specific and this bridge is not an assertion that Harbor has already been run
 in this repository.
 
+When a task has no registered candidate set, the adapter may omit `candidates`
+or send `[]`. The proxy returns a safe `abstain/unmatched` decision; the
+frontier actor remains owned by the harness, and its completed tool trajectory
+becomes the next local dataset example.
+
 For learned decisions, include the returned `routeId` in the completion
 episode. A successful completion increments the local route's replay counter;
 the same feedback path lets a harness preserve failed-route evidence and fall

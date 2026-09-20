@@ -460,6 +460,19 @@ test('decision service ingests open-world episodes into the local learning datas
     const baseUrl = `http://${address.host}:${address.port}`;
     const health = await fetch(`${baseUrl}/health`).then(response => response.json());
     assert.equal(health.learningConfigured, true);
+    const openWorld = await fetch(`${baseUrl}/v1/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Discover an unregistered workflow',
+        state: { ready: true }
+      })
+    });
+    assert.equal(openWorld.status, 200);
+    const openWorldDecision = await openWorld.json();
+    assert.equal(openWorldDecision.source, 'abstain');
+    assert.equal(openWorldDecision.routeResolution, 'unmatched');
+    assert.deepEqual(openWorldDecision.candidates, []);
     const postEpisode = () => fetch(`${baseUrl}/v1/episodes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

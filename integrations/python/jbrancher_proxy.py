@@ -78,16 +78,21 @@ class JBrancherProxy:
         self,
         task: str,
         state: Any,
-        candidates: Sequence[Any],
+        candidates: Sequence[Any] | None = None,
         history: Sequence[Any] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(task, str) or not task.strip():
             raise ValueError("task must be a non-empty string")
-        if not isinstance(candidates, (list, tuple)) or not candidates:
-            raise ValueError("candidates must be a non-empty sequence")
+        if candidates is not None and not isinstance(candidates, (list, tuple)):
+            raise ValueError("candidates must be a sequence when provided")
         return self._request(
             "/v1/decide",
-            {"task": task, "state": state, "history": list(history or []), "candidates": list(candidates)},
+            {
+                "task": task,
+                "state": state,
+                "history": list(history or []),
+                "candidates": list(candidates or []),
+            },
         )
 
     def record_episode(
@@ -150,7 +155,7 @@ class JBrancherProxy:
         self,
         task: str,
         state: Any,
-        candidates: Sequence[Any],
+        candidates: Sequence[Any] | None,
         frontier: Callable[[dict[str, Any]], Mapping[str, Any]],
         *,
         history: Sequence[Any] | None = None,

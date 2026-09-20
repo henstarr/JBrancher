@@ -28,6 +28,9 @@ from integrations.python import JBrancherProxy
 
 proxy = JBrancherProxy(sys.argv[1])
 assert proxy.health()["learningConfigured"] is True
+open_world = proxy.decide("Discover an unregistered workflow", {"ready": True})
+assert open_world["source"] == "abstain", open_world
+assert open_world["routeResolution"] == "unmatched", open_world
 for _ in range(2):
     proxy.record_episode(
         "Inspect package.json",

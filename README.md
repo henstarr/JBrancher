@@ -447,6 +447,13 @@ curl http://127.0.0.1:8787/v1/decide \
 
 The proxy exposes `GET /health`, `GET /stats`, and (when `--learning-dir` is supplied) `GET /v1/learning`. It is a decision proxy, not a transparent OpenAI/Anthropic replacement: the caller must supply the actions that are legal in the current harness state. This is what keeps JBrancher bounded and prevents it from inventing executable work.
 
+For genuinely open-world work, omit `candidates` or send an empty array. The
+proxy returns `source: "abstain"` and `routeResolution: "unmatched"`; the
+harness should then call its frontier actor, execute and verify the result, and
+send the completed trajectory to `/v1/episodes`. This makes dataset collection
+work for routes that were never registered ahead of time without allowing the
+proxy to invent an executable action.
+
 ### Recording unknown routes for future reuse
 
 Open-world harnesses can send completed frontier trajectories to the same local
