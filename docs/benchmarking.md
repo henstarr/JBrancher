@@ -18,12 +18,30 @@ Use `--assert` for the same regression gates used by CI:
 
 ```sh
 npm run bench:offline -- --assert
+npm run bench:cost -- --assert
 npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
+
+The paired cost fixture uses the same task set, actor, and completion oracle for
+actor-only, rules-only, and JBrancher arms. It reports task success, actor and
+Jev calls, input/output tokens, token reduction, and latency:
+
+```sh
+npm run bench:cost -- --assert
+```
+
+To calculate an optional provider-cost estimate, pass rates in dollars per
+million tokens. Do not treat the synthetic rates or oracle as a claim about a
+frontier model:
+
+```sh
+npm run bench:cost -- --actor-input-rate 3 --actor-output-rate 15 \
+  --jev-input-rate 0.5 --jev-output-rate 2
+```
 
 To save a machine-readable report:
 

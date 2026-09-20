@@ -26,6 +26,7 @@
     "doctor": "node bin/jbrancher.js doctor",
     "live:smoke": "node bin/jbrancher.js live-check",
     "bench:offline": "node benchmarks/run-routing.js",
+    "bench:cost": "node benchmarks/run-cost.js",
     "bench:tokens": "node benchmarks/run-token-optimization.js",
     "bench:learning": "node benchmarks/run-learning.js",
     "bench:live-learning": "node benchmarks/run-live-learning.js",

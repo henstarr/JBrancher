@@ -24,5 +24,6 @@ jobs:
       - run: npm test
       - run: npm run demo
       - run: npm run bench:offline -- --assert
+      - run: npm run bench:cost -- --assert
       - run: npm run bench:tokens -- --assert
       - run: npm run bench:learning -- --assert
