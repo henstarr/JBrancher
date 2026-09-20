@@ -1,3 +1,5 @@
+import { createEpisodeRecorder, createLearnedActions, refreshAndPromoteReadOnly } from './learning.js';
+
 const clone = value => structuredClone(value);
 
 function assertPlainAction(action) {
@@ -41,7 +43,14 @@ export function createJBrancher({
   minimumProbability = 0.7,
   minimumMargin = 0.15,
   maxSteps = 12,
-  onEvent = () => {}
+  onEvent = () => {},
+  learningStore,
+  learningSource = 'harness',
+  learningCwd = '',
+  learningOnlyFallback = true,
+  learningAutoPromote = true,
+  learningMinimumObservations = 2,
+  learningMinimumSimilarity = 0.8
 } = {}) {
   if (!Array.isArray(rules) || rules.some(rule => typeof rule !== 'function')) throw new TypeError('rules must be functions');
   if (getCandidates !== undefined && typeof getCandidates !== 'function') throw new TypeError('getCandidates must be a function');
@@ -53,6 +62,20 @@ export function createJBrancher({
     throw new TypeError('Invalid evaluator thresholds');
   }
   if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) throw new TypeError('maxSteps must be a positive integer');
+  if (learningStore !== undefined && (!learningStore || typeof learningStore.appendTrace !== 'function')) {
+    throw new TypeError('learningStore must expose appendTrace()');
+  }
+  if (typeof learningSource !== 'string' || typeof learningCwd !== 'string') {
+    throw new TypeError('learningSource and learningCwd must be strings');
+  }
+  if (typeof learningOnlyFallback !== 'boolean') throw new TypeError('learningOnlyFallback must be boolean');
+  if (typeof learningAutoPromote !== 'boolean') throw new TypeError('learningAutoPromote must be boolean');
+  if (!Number.isSafeInteger(learningMinimumObservations) || learningMinimumObservations < 1) {
+    throw new TypeError('learningMinimumObservations must be a positive integer');
+  }
+  if (!Number.isFinite(learningMinimumSimilarity) || learningMinimumSimilarity < 0 || learningMinimumSimilarity > 1) {
+    throw new TypeError('Invalid learningMinimumSimilarity');
+  }
 
   async function decide(input = {}) {
     const state = clone(input.state ?? {});
@@ -77,6 +100,18 @@ export function createJBrancher({
       });
     }
 
+    if (learningStore && getCandidates && typeof learningStore.readRoutes === 'function' && candidates.length > 0) {
+      try {
+        const learned = createLearnedActions(await learningStore.readRoutes(), task)
+          .filter(action => candidates.some(candidate => sameAction(candidate, action)));
+        if (learned.length === 1) {
+          return { source: 'learned', action: clone(learned[0]), reason: 'A proven local read-only route matched', usage: [] };
+        }
+      } catch {
+        // Learned routing is advisory; the normal candidate/evaluator path remains authoritative.
+      }
+    }
+
     let evaluation = null;
     if (evaluate && candidates.length > 0) {
       try {
@@ -99,34 +134,102 @@ export function createJBrancher({
     return { source: 'actor', action: clone(result?.action ?? null), evaluation, usage: clone(result?.usage ?? []) };
   }
 
-  async function step(input = {}) {
+  function shouldRecord(decision) {
+    return Boolean(learningStore && (!learningOnlyFallback || decision.source === 'actor'));
+  }
+
+  function recordAction(recorder, decision, stepNumber) {
+    if (!recorder || !decision.action || typeof decision.action.tool !== 'string') return null;
+    const toolCallId = `step-${stepNumber}`;
+    recorder.recordToolCall({
+      toolCallId,
+      toolName: decision.action.tool,
+      input: decision.action.args
+    });
+    return toolCallId;
+  }
+
+  async function finishRecorder(recorder, options) {
+    if (!recorder || recorder.toolCalls.length === 0) return undefined;
+    try {
+      const saved = await recorder.finish(options);
+      if (saved?.outcome === 'success' && learningAutoPromote
+        && typeof learningStore?.refreshCandidates === 'function'
+        && typeof learningStore?.promote === 'function') {
+        await refreshAndPromoteReadOnly(learningStore, {
+          minimumObservations: learningMinimumObservations,
+          minimumSimilarity: learningMinimumSimilarity
+        });
+      }
+      return saved;
+    } catch {
+      // Learning must never turn a successful harness action into a failed step.
+      return undefined;
+    }
+  }
+
+  async function executeStep(input = {}, recorder) {
     const decision = await decide(input);
+    const actionRecorder = shouldRecord(decision) ? recorder : null;
+    const toolCallId = recordAction(actionRecorder, decision, input.step ?? 0);
     const event = { step: input.step ?? 0, state: clone(input.state ?? {}), decision: clone(decision) };
     if (decision.action !== null && execute) {
-      event.result = await execute(clone(decision.action), {
-        state: clone(input.state ?? {}), task: clone(input.task ?? ''), history: clone(input.history ?? []), signal: input.signal
-      });
+      try {
+        event.result = await execute(clone(decision.action), {
+          state: clone(input.state ?? {}), task: clone(input.task ?? ''), history: clone(input.history ?? []), signal: input.signal
+        });
+        if (toolCallId) recorder.recordToolResult({ toolCallId, output: event.result });
+      } catch (error) {
+        if (toolCallId) recorder.recordToolResult({ toolCallId, isError: true, output: error?.message || String(error) });
+        throw error;
+      }
     }
     await onEvent(clone(event));
     return event;
+  }
+
+  async function step(input = {}) {
+    const recorder = learningStore
+      ? createEpisodeRecorder({ store: learningStore, task: String(input.task ?? ''), cwd: learningCwd, source: learningSource })
+      : null;
+    try {
+      const event = await executeStep(input, recorder);
+      await finishRecorder(recorder, { metadata: { mode: 'step', decisionSource: event.decision.source } });
+      return event;
+    } catch (error) {
+      await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'step' } }).catch(() => {});
+      throw error;
+    }
   }
 
   async function run(input = {}) {
     let state = clone(input.state ?? {});
     let history = clone(input.history ?? []);
     const events = [];
-    for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
-      const event = await step({ ...input, state, history, step: stepNumber });
-      events.push(event);
-      history = [...history, event];
-      if (event.decision.action === null || !execute) break;
-      if (typeof input.observe !== 'function') break;
-      state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
+    const recorder = learningStore
+      ? createEpisodeRecorder({ store: learningStore, task: String(input.task ?? ''), cwd: learningCwd, source: learningSource })
+      : null;
+    try {
+      for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
+        const event = await executeStep({ ...input, state, history, step: stepNumber }, recorder);
+        events.push(event);
+        history = [...history, event];
+        if (event.decision.action === null || !execute) break;
+        if (typeof input.observe !== 'function') break;
+        state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
+      }
+      await finishRecorder(recorder, { metadata: { mode: 'run', steps: events.length } });
+    } catch (error) {
+      await finishRecorder(recorder, { outcome: 'unknown', metadata: { mode: 'run', steps: events.length } }).catch(() => {});
+      throw error;
     }
     return { events, state, history };
   }
 
-  return { decide, step, run, metadata: { minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length } };
+  return { decide, step, run, metadata: {
+    minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
+    learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback
+  } };
 }
 
 export { sameAction };

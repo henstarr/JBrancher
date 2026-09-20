@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createJBrancher, withJBrancher } from '../src/index.js';
+import { createLocalLearningStore } from '../src/learning.js';
 import { createJBrancherServer } from '../src/server.js';
 
 test('rules run before evaluation and actor fallback', async () => {
@@ -78,6 +82,44 @@ test('withJBrancher preserves the actor and routes nextAction through JBrancher'
   assert.equal(result.source, 'jev');
   assert.deepEqual(result.action, { tool: 'fast_path', args: {} });
   assert.equal(wrapped.jbrancher.metadata.ruleCount, 0);
+});
+
+test('generic brancher records unknown actor fallback episodes in a local store', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-learning-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let actorCalls = 0;
+    const brancher = createJBrancher({
+      getCandidates: async () => [{ tool: 'read', args: { path: 'README.md' } }],
+      actor: async () => {
+        actorCalls++;
+        return { action: { tool: 'read', args: { path: 'README.md' } } };
+      },
+      execute: async action => `contents of ${action.args.path}`,
+      learningStore: store,
+      learningSource: 'custom-harness',
+      learningCwd: directory
+    });
+    const first = await brancher.step({ task: 'Read README.md' });
+    const second = await brancher.step({ task: 'Read README.md' });
+    assert.equal(first.decision.source, 'actor');
+    assert.equal(second.decision.source, 'actor');
+    assert.equal(actorCalls, 2);
+    const traces = await store.readTraces();
+    assert.equal(traces.length, 2);
+    assert.equal(traces[0].source, 'custom-harness');
+    assert.equal(traces[0].outcome, 'success');
+    assert.equal(traces[0].toolCalls[0].toolName, 'read');
+    assert.equal(traces[0].toolCalls[0].output, 'contents of README.md');
+    const routes = await store.readRoutes();
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+    const learned = await brancher.step({ task: 'Read README.md' });
+    assert.equal(learned.decision.source, 'learned');
+    assert.equal(actorCalls, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('decision service exposes health, decisions, and stats without exposing credentials', async () => {

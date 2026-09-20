@@ -178,6 +178,23 @@ await episode.finish();
 The adapter only supplies lifecycle events; JBrancher owns redaction, local
 dataset append, candidate mining, and promotion policy.
 
+For a harness that uses the generic runtime instead of Pi, pass the same store
+as `learningStore` to `createJBrancher`. `step()` records one fallback action;
+`run()` records the whole fallback workflow as one episode and automatically
+refreshes safe local routes:
+
+```js
+const brancher = createJBrancher({
+  getCandidates: context => harness.allowedNextActions(context),
+  actor: context => actor.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: createLocalLearningStore({ directory: '.jbrancher' })
+});
+```
+
+Learned actions never bypass `getCandidates`; the harness remains the source
+of truth for what is legal in the current state.
+
 Run the local replay benchmark:
 
 ```sh

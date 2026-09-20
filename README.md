@@ -213,6 +213,35 @@ await harness.execute(decision.action, { task, state, history });
 
 Your actor remains the fallback. JBrancher only selects from the candidates returned by your harness.
 
+### Let a custom harness learn unknown fallback work
+
+Pass the local learning store to `createJBrancher` when you want an unknown
+actor decision to become a reusable example. JBrancher records only actions
+that the actor fallback actually selected and that your `execute` function
+completed. After repeated successful examples, safe single-step routes are
+loaded back into the same decision boundary automatically:
+
+```js
+import { createJBrancher } from 'jbrancher';
+import { createLocalLearningStore } from 'jbrancher/learning';
+
+const store = createLocalLearningStore({ directory: '.jbrancher' });
+const brancher = createJBrancher({
+  getCandidates: ({ state }) => harness.allowedNextActions(state),
+  actor: context => existingActor.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: store,
+  learningSource: 'my-harness',
+  learningCwd: process.cwd()
+});
+```
+
+The harness still authorizes every action: a learned action is used only when
+it matches the current task and is present in the candidate set returned by
+`getCandidates`. Otherwise the normal Jev/actor path runs. Learning is local,
+redacted, and advisory; set `learningAutoPromote: false` if candidates should
+always require manual promotion.
+
 ### Reduce context tokens before a model call
 
 For large prompts, let Jev rank optional context while code enforces a hard token budget:

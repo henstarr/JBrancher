@@ -1,6 +1,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createJBrancher } from '../src/index.js';
 import { createLocalLearningStore, createLearnedRoutes } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
@@ -92,12 +93,49 @@ async function benchmarkPathTemplate(store) {
   };
 }
 
+async function benchmarkGenericHarness(instance, store) {
+  const tasks = benchmarkTasks(instance);
+  const expectedPath = instance.fail_to_pass[0];
+  let actorCalls = 0;
+  const brancher = createJBrancher({
+    getCandidates: async () => [{ tool: 'read', args: { path: expectedPath } }],
+    actor: async () => {
+      actorCalls++;
+      return { action: { tool: 'read', args: { path: expectedPath } } };
+    },
+    execute: async action => `fixture contents for ${action.args.path}`,
+    learningStore: store,
+    learningSource: 'benchmark-harness'
+  });
+  const rows = [];
+  for (let attempt = 1; attempt <= repetitions; attempt++) {
+    const task = attempt <= warmupAttempts
+      ? tasks.warmup[(attempt - 1) % tasks.warmup.length]
+      : tasks.reuse;
+    const event = await brancher.step({ task });
+    rows.push({
+      attempt,
+      source: event.decision.source,
+      correct: event.result === `fixture contents for ${expectedPath}`
+    });
+  }
+  return {
+    instance_id: instance.instance_id,
+    actorCalls,
+    learnedCalls: repetitions - actorCalls,
+    rows
+  };
+}
+
 const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-swebench-learning-'));
 try {
   const store = createLocalLearningStore({ directory: join(directory, 'swebench') });
   const pathTemplateStore = createLocalLearningStore({ directory: join(directory, 'path-template') });
+  const genericStore = createLocalLearningStore({ directory: join(directory, 'generic-harness') });
   const rows = [];
+  const genericRows = [];
   for (const instance of fixture.instances) rows.push(await benchmarkInstance(instance, store));
+  for (const instance of fixture.instances) genericRows.push(await benchmarkGenericHarness(instance, genericStore));
   const baselineFrontierCalls = fixture.instances.length * repetitions;
   const learnedFrontierCalls = rows.reduce((sum, row) => sum + row.frontierCalls, 0);
   const savedPromptTokens = rows.reduce((sum, row) => sum + row.savedPromptTokens, 0);
@@ -123,6 +161,15 @@ try {
       frontierCallsAvoided: baselineFrontierCalls - learnedFrontierCalls,
       frontierCallReduction: Number(((baselineFrontierCalls - learnedFrontierCalls) / baselineFrontierCalls).toFixed(3)),
       estimatedPromptTokensSaved: savedPromptTokens
+    },
+    genericHarness: {
+      baselineActorCalls: fixture.instances.length * repetitions,
+      learnedActorCalls: genericRows.reduce((sum, row) => sum + row.actorCalls, 0),
+      actorCallsAvoided: fixture.instances.length * repetitions - genericRows.reduce((sum, row) => sum + row.actorCalls, 0),
+      actorCallReduction: Number(((fixture.instances.length * repetitions - genericRows.reduce((sum, row) => sum + row.actorCalls, 0))
+        / (fixture.instances.length * repetitions)).toFixed(3)),
+      routeCoverage: genericRows.flatMap(row => row.rows).every(row => row.correct) ? 1 : 0,
+      rows: genericRows
     },
     pathTemplate,
     rows

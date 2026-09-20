@@ -16,6 +16,9 @@
   candidate mining, conservative paraphrase generalization, automatic read-only
   promotion, guarded path templates, a harness-neutral episode recorder, and a
   SWE-bench Lite routing replay.
+- Add optional generic-runtime learning: actor fallback episodes can be stored
+  locally, promoted after repeated safe success, and reused only when the
+  harness still exposes the learned action as an allowed candidate.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

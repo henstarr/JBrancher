@@ -209,6 +209,41 @@ export function createLearnedRoutes(records = []) {
   return records.map(routeFromRecord).filter(Boolean);
 }
 
+function learnedActionFromRecord(record, task) {
+  if (record?.status !== 'active' || record.safety !== 'read-only') return null;
+  const actions = actionsFromRecord(record);
+  if (actions.length !== 1) return null;
+  if (record.matcher?.type === 'read-path') {
+    const path = extractPathFromTask(task);
+    if (!path || !matchesStoredMatcher(record.matcher, task)) return null;
+    return {
+      tool: 'read',
+      args: {
+        path,
+        ...(actions[0].input?.offset === undefined ? {} : { offset: actions[0].input.offset }),
+        ...(actions[0].input?.limit === undefined ? {} : { limit: actions[0].input.limit })
+      }
+    };
+  }
+  if (!matchesStoredMatcher(record.matcher, task)) return null;
+  return { tool: actions[0].toolName, args: actions[0].input };
+}
+
+/**
+ * Return safe, single-step learned actions that match a task.
+ *
+ * The caller must still check the action against its own authorization and
+ * candidate set before executing it. Multi-step learned workflows remain
+ * available through createLearnedRoutes for Pi, but are not flattened into a
+ * generic harness action.
+ */
+export function createLearnedActions(records = [], task = '') {
+  if (!Array.isArray(records)) throw new TypeError('records must be an array');
+  if (typeof task !== 'string') throw new TypeError('task must be a string');
+  const actions = records.map(record => learnedActionFromRecord(record, task)).filter(Boolean);
+  return actions.filter((action, index) => actions.findIndex(item => actionKey(item.tool, item.args) === actionKey(action.tool, action.args)) === index);
+}
+
 export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
   if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
   const actionGroups = new Map();

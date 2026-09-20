@@ -72,6 +72,27 @@ const event = await brancher.step({ task, state, history });
 
 The harness remains responsible for authorization, sandboxing, idempotency, observation, and completion checks. Start with shadow logging, then enable execution only for actions that pass domain-specific validation.
 
+For a learning run, provide a project-local store:
+
+```js
+const store = createLocalLearningStore({ directory: '.jbrancher' });
+const brancher = createJBrancher({
+  getCandidates: context => harness.allowedNextActions(context),
+  actor: context => existingActor.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: store,
+  learningSource: 'benchmark-harness'
+});
+```
+
+This creates a closed-loop experiment: actor fallbacks produce redacted
+episodes, repeated successful read-only episodes are promoted locally, and a
+later run can use a learned action only when it is still present in the
+harness-provided candidate set. Keep learning enabled for both paired arms
+only when you are measuring dataset growth; for a clean cost comparison,
+freeze or copy the learned `.jbrancher/routes.json` between trials so the
+controls do not receive different experience.
+
 ## Terminal-Bench / Harbor
 
 Harbor is the current harness for running Terminal-Bench 2.0. The right integration is a custom Harbor agent that owns the normal terminal loop and invokes JBrancher at the next-action boundary. Keep the benchmark task and verifier unchanged.
