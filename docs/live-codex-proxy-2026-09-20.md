@@ -10,9 +10,9 @@ resolution.
 | --- | ---: | ---: |
 | Fixture task success | 100% | 100% |
 | Codex actor calls | 3 | 2 |
-| Input tokens | 47,844 observed | 31,896 observed |
+| Input tokens | 47,838 observed | 31,892 observed |
 | Output tokens | 27 observed | 18 observed |
-| Total tokens | 47,871 | 31,914 |
+| Total tokens | 47,865 | 31,910 |
 | Learned-route coverage | — | 100% |
 | Successful replay records | — | 1 |
 
@@ -22,8 +22,8 @@ call. The learned replay took 15.3 ms in this run. The local store contained
 three redacted traces and one active route after completion.
 
 For an illustrative rate calculation only, the command used $3 per million
-input tokens and $15 per million output tokens. That estimates $0.143937 for
-the actor-only arm and $0.095958 for the JBrancher arm, saving $0.047979
+input tokens and $15 per million output tokens. That estimates $0.143919 for
+the actor-only arm and $0.095946 for the JBrancher arm, saving $0.047973
 (33.3%). These rates are not a Codex pricing claim; supply current rates for a
 meaningful cost comparison.
 

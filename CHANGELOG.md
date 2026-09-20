@@ -28,6 +28,8 @@
   safe before frontier trajectories are recorded.
 - Check in a fresh one-task live Jev measurement with observed usage and local
   replay latency; credentials remain outside the repository.
+- Refresh the checked-in live Codex proxy report with the latest real actor
+  usage and cost comparison.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.
