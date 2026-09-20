@@ -126,8 +126,9 @@ project-local learned route. Codex usage is observed from its JSON event stream;
 pass `--actor-input-rate` and `--actor-output-rate` to add a cost estimate.
 The benchmark never grants write access to the repository and removes its
 temporary learning store after the run.
-The latest checked-in real-actor sample is in
-[docs/live-codex-2026-09-20.md](live-codex-2026-09-20.md).
+The one-task pilot is in [docs/live-codex-2026-09-20.md](live-codex-2026-09-20.md),
+and the larger three-task sample is in
+[docs/live-codex-3tasks-2026-09-20.md](live-codex-3tasks-2026-09-20.md).
 
 ```sh
 python -m pip install -r benchmarks/requirements.txt
