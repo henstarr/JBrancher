@@ -557,6 +557,7 @@ regression in accuracy, held-out coverage, or measured savings fails loudly:
 npm run bench:offline -- --assert
 npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
+npm run bench:proxy -- --assert
 ```
 
 It compares actor-only, rules-plus-actor, and rules-plus-Jev-plus-actor on a fixed fixture. This measures decision accuracy, actor calls avoided, fallback coverage, and evaluator calls without making paid requests. It is a wiring and regression benchmark, not evidence that Jev improves every task.
@@ -573,6 +574,17 @@ npm run bench:live-learning -- --instances 2 --repetitions 4
 This makes a bounded live request only for the warm-up decisions, then reports
 actual Jev input/output usage and the authorized local-route coverage. It does
 not run the official SWE-bench grader or print credentials.
+
+To benchmark the language-agnostic open-world bridge, run:
+
+```sh
+npm run bench:proxy -- --assert
+```
+
+This sends SWE-bench-derived tasks through the local HTTP proxy, records two
+frontier episodes per task, then verifies that later authorized decisions are
+served by learned local routes without evaluator calls. It requires no API key
+and uses a temporary local store.
 
 For end-to-end evidence, use the same agent, model, task set, Docker image, timeout, and retry budget in paired runs. The recommended progression is:
 

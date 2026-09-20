@@ -9,6 +9,9 @@
 - Added GitHub README buttons and safe `.env.example` onboarding.
 # Unreleased
 
+- Add an opt-in local HTTP episode bridge for open-world harnesses, including
+  learned-route replay through `/v1/decide` and a SWE-bench-derived proxy
+  benchmark with CI assertions.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

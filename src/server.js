@@ -175,6 +175,13 @@ export function createJBrancherServer({
 
       const brancher = createJBrancher({
         getCandidates: () => input.candidates,
+        learningStore: learner?.store,
+        learningSource,
+        learningCwd,
+        learningAutoPromote,
+        learningMinimumObservations,
+        learningCandidateMinimumObservations,
+        learningMinimumSimilarity,
         evaluate: evaluator ? async context => {
           stats.evaluatorCalls += 1;
           return evaluator(context);

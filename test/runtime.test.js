@@ -449,8 +449,9 @@ test('decision service exposes health, decisions, and stats without exposing cre
 
 test('decision service ingests open-world episodes into the local learning dataset', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-proxy-learning-'));
+  let evaluatorCalls = 0;
   const service = createJBrancherServer({
-    evaluate: async () => ({ scores: [0.9], usage: [] }),
+    evaluate: async () => { evaluatorCalls += 1; return { scores: [0.9], usage: [] }; },
     learningDirectory: directory,
     learningSource: 'test-proxy'
   });
@@ -459,18 +460,18 @@ test('decision service ingests open-world episodes into the local learning datas
     const baseUrl = `http://${address.host}:${address.port}`;
     const health = await fetch(`${baseUrl}/health`).then(response => response.json());
     assert.equal(health.learningConfigured, true);
-    const response = await fetch(`${baseUrl}/v1/episodes`, {
+    const postEpisode = () => fetch(`${baseUrl}/v1/episodes`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        task: 'Inspect the project and run its tests',
+        task: 'Inspect package.json',
         source: 'python-harness',
         routeResolution: 'unmatched',
         metadata: { runId: 'redacted-test-run' },
         toolCalls: [{
           toolCallId: 'call-1',
-          toolName: 'bash',
-          input: { command: 'npm test' },
+          toolName: 'read',
+          input: { path: 'package.json' },
           context: { candidateCount: 0 },
           ok: true,
           output: 'all tests passed'
@@ -478,6 +479,7 @@ test('decision service ingests open-world episodes into the local learning datas
         outcome: 'success'
       })
     });
+    const response = await postEpisode();
     assert.equal(response.status, 201);
     const body = await response.json();
     assert.equal(body.trace.outcome, 'success');
@@ -485,10 +487,24 @@ test('decision service ingests open-world episodes into the local learning datas
     assert.equal(body.learning.traces, 1);
     assert.equal(body.learning.outcomes.success, 1);
     assert.equal(body.learning.resolutions.unmatched, 1);
+    await postEpisode();
+    const replay = await fetch(`${baseUrl}/v1/decide`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'Inspect package.json',
+        state: { ready: true },
+        candidates: [{ tool: 'read', args: { path: 'package.json' } }]
+      })
+    }).then(result => result.json());
+    assert.equal(replay.source, 'learned');
+    assert.deepEqual(replay.action, { tool: 'read', args: { path: 'package.json' } });
+    assert.equal(evaluatorCalls, 0);
     const stats = await fetch(`${baseUrl}/stats`).then(result => result.json());
-    assert.equal(stats.episodesRecorded, 1);
+    assert.equal(stats.episodesRecorded, 2);
+    assert.equal(stats.sources.learned, 1);
     const learning = await fetch(`${baseUrl}/v1/learning`).then(result => result.json());
-    assert.equal(learning.traces, 1);
+    assert.equal(learning.traces, 2);
   } finally {
     await service.close();
     await rm(directory, { recursive: true, force: true });

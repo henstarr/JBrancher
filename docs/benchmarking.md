@@ -21,6 +21,7 @@ npm run bench:offline -- --assert
 npm run bench:cost -- --assert
 npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
+npm run bench:proxy -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
@@ -75,6 +76,19 @@ four warm-up attempts:
 These are routing-efficiency and synthetic context measurements, not official
 patch-resolution scores. Re-run them locally after changing the learner; run
 the official SWE-bench Docker harness separately for task success.
+
+The language-agnostic proxy benchmark exercises the actual HTTP capture and
+replay boundary using the same SWE-bench-derived prompts:
+
+```sh
+npm run bench:proxy -- --assert
+```
+
+It records two successful unmatched episodes per task, then sends later
+authorized decisions through `/v1/decide`. The assertion requires 100% learned
+route coverage, zero evaluator calls on replay, and a positive frontier-call
+reduction. It is a local transport/learning benchmark—not an official
+SWE-bench patch-resolution result.
 
 To measure actual Jev overhead and savings on the same learning path, configure
 `TYPESAFE_API_KEY` in the ignored `.env` and run:
