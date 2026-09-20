@@ -119,7 +119,8 @@ export function createPiRouter({ routes = [], evaluate, minimumProbability = 0.7
       state: clone(input.state ?? {}),
       history: clone(input.history ?? []),
       signal: input.signal,
-      exec: input.exec
+      exec: input.exec,
+      readFile: input.readFile
     });
   }
 

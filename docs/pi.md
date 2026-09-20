@@ -110,6 +110,60 @@ The package includes conservative read-only routes for:
 Set `includeBuiltins: false` in `jbrancher.config.js` to disable them. Project
 routes are additive and are loaded after built-ins.
 
+## Local learning mode
+
+Enable the learner with either:
+
+```sh
+JBRANCHER_PI_MODE=learning pi -e .
+```
+
+or:
+
+```sh
+JBRANCHER_PI_LEARNING=1 pi -e .
+```
+
+In learning mode, prompts that fall through to Pi are observed through Pi's
+tool lifecycle. JBrancher writes redacted JSONL traces, a route cache, and a
+portable episode dataset to `.jbrancher/` in the current project. No remote
+database is used.
+
+The local loop is deliberately conservative:
+
+1. Pi handles an unknown prompt normally.
+2. JBrancher records the prompt, ordered tools, bounded arguments, outputs, and
+   tool outcomes. This is the dataset-building path for routes that are not
+   registered ahead of time.
+3. `/jbrancher dataset` regenerates `.jbrancher/dataset.jsonl`; examples are
+   redacted, labeled with outcome and safety, and assigned stable train,
+   validation, or test splits.
+4. `/jbrancher candidates` mines repeated successful workflows with the same
+   normalized task and action sequence.
+5. Repeated read-only candidates are promoted automatically; `/jbrancher promote <id>`
+   is available for explicit manual promotion.
+6. The active route can answer the same prompt without a frontier turn.
+
+Learned routes currently support exact normalized prompts for one or more
+repeated `read` actions and a small allowlist of read-only `bash` commands.
+Other actions remain in the dataset but are candidate or fallback-only; this
+prevents learning from silently replaying writes, deletes, deployments, or
+arbitrary shell commands. The trace store is local and ignored by Git, so users
+can delete `.jbrancher/` to reset learning. Set
+`autoPromoteReadOnly: false` in `jbrancher.config.js` if you want every
+candidate to require manual promotion.
+
+Run the local replay benchmark:
+
+```sh
+npm run bench:learning
+```
+
+It uses three real SWE-bench Lite bug statements and deterministic read traces
+to measure warm-up versus reuse. It reports frontier-call and estimated prompt
+token savings, but does not claim official SWE-bench patch success because it
+does not run the SWE-bench Docker harness.
+
 ## Shadow mode and measurement
 
 Use shadow mode to measure deterministic opportunities without changing the

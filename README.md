@@ -132,6 +132,44 @@ and `/jbrancher reload` after changing the config. Set
 See [Pi integration](docs/pi.md) for configuration, limits, and the exact
 fallback contract.
 
+### Let Pi learn local workflows
+
+Enable local learning when you want JBrancher to observe frontier work and
+build a private, reviewable route cache:
+
+```sh
+JBRANCHER_PI_MODE=learning pi -e .
+```
+
+Traces and route candidates stay in the project-local, ignored `.jbrancher/`
+directory. JBrancher records redacted tool observations, proposes routes after
+repeated successful traces, and automatically promotes only exact read-only
+routes:
+
+```text
+frontier fallback → redacted local trace → repeated candidate → promotion → fast path
+```
+
+There is no “unknown route” error. A prompt with no registered match simply
+continues to Pi's frontier model. In learning mode, that entire episode is
+captured locally as a redacted JSONL example in `.jbrancher/dataset.jsonl`:
+the task, ordered tool calls, bounded outputs, outcome, safety label, and a
+stable train/validation/test split. This gives you a private, incrementally
+built dataset without an external database. Use `/jbrancher dataset` to
+regenerate it after importing or editing traces.
+
+Use `/jbrancher candidates` to inspect candidates and `/jbrancher promote <id>`
+for explicit promotion. Unknown or side-effecting actions remain fallback-only
+until explicitly configured. Run the local SWE-bench Lite replay
+benchmark with:
+
+```sh
+npm run bench:learning
+```
+
+The benchmark uses real SWE-bench problem statements to measure routing reuse;
+it is not an official SWE-bench patch-resolution result.
+
 ### Wrap your own harness
 
 Install JBrancher directly from GitHub:

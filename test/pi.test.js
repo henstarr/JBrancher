@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
@@ -92,6 +92,43 @@ test('Pi extension handles a built-in deterministic prompt and leaves other prom
     assert.deepEqual(fallback, { action: 'continue' });
     assert.ok(notifications.some(message => message.includes('deterministic route')));
   } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('Pi learning mode records fallback tool use and auto-promotes repeated safe reads', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-learning-test-'));
+  const handlers = new Map();
+  const pi = {
+    on(name, handler) { handlers.set(name, handler); },
+    registerCommand() {},
+    sendMessage() {},
+    exec: async () => ({ code: 0, stdout: '', stderr: '' })
+  };
+  const ctx = {
+    cwd: directory,
+    mode: 'json',
+    hasUI: false,
+    ui: { notify() {}, setStatus() {} }
+  };
+  const previousMode = process.env.JBRANCHER_PI_MODE;
+  process.env.JBRANCHER_PI_MODE = 'learning';
+  try {
+    await jbrancherPiExtension(pi);
+    await handlers.get('session_start')({}, ctx);
+    for (const id of ['one', 'two']) {
+      await handlers.get('input')({ text: 'read the package', source: 'interactive' }, ctx);
+      await handlers.get('tool_call')({ toolCallId: id, toolName: 'read', input: { path: 'package.json' } }, ctx);
+      await handlers.get('tool_result')({ toolCallId: id, isError: false, content: [{ type: 'text', text: 'ok' }] }, ctx);
+      await handlers.get('agent_end')({}, ctx);
+    }
+    const routes = JSON.parse(await readFile(join(directory, '.jbrancher', 'routes.json'), 'utf8'));
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].safety, 'read-only');
+  } finally {
+    if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
+    else process.env.JBRANCHER_PI_MODE = previousMode;
     await rm(directory, { recursive: true, force: true });
   }
 });

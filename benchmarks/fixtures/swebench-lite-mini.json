@@ -1,0 +1,25 @@
+{
+  "source": "SWE-bench_Lite",
+  "sourceUrl": "https://huggingface.co/datasets/SWE-bench/SWE-bench_Lite",
+  "retrievedAt": "2026-09-20",
+  "instances": [
+    {
+      "instance_id": "astropy__astropy-12907",
+      "repo": "astropy/astropy",
+      "problem_statement": "Modeling's separability_matrix does not compute separability correctly for nested CompoundModels. A nested Pix2Sky_TAN and Linear1D composition produces a non-diagonal matrix where the linear inputs and outputs should remain independent.",
+      "fail_to_pass": ["astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6]", "astropy/modeling/tests/test_separable.py::test_separable[compound_model9-result9]"]
+    },
+    {
+      "instance_id": "astropy__astropy-14182",
+      "repo": "astropy/astropy",
+      "problem_statement": "Please support header rows in RestructuredText output. Writing an Astropy table with header_rows raises a TypeError because the RST writer does not accept the header_rows argument and cannot round-trip named, unit, and dtype header rows.",
+      "fail_to_pass": ["astropy/io/ascii/tests/test_rst.py::test_rst_with_header_rows"]
+    },
+    {
+      "instance_id": "astropy__astropy-14365",
+      "repo": "astropy/astropy",
+      "problem_statement": "Possible bug in io.fits related to D exponents. A chararray replace operation is not in-place, so FITS output fields keep the wrong exponent separator and the regression is not detected by the existing tests.",
+      "fail_to_pass": ["astropy/io/fits/tests/test_checksum.py::TestChecksumFunctions::test_ascii_table_data", "astropy/io/fits/tests/test_table.py::TestTableFunctions::test_ascii_table"]
+    }
+  ]
+}

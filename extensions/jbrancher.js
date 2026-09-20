@@ -1,6 +1,7 @@
-import { access, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, readFile as readTextFile } from 'node:fs/promises';
+import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createLocalLearningStore, createLearnedRoutes } from '../src/learning.js';
 import { createJevEvaluator } from '../src/jev.js';
 import { createPiRouter, formatPiResult } from '../src/pi.js';
 
@@ -51,7 +52,7 @@ async function loadConfig(cwd) {
 
 async function loadLocalEnv(cwd) {
   try {
-    const contents = await readFile(join(cwd, '.env'), 'utf8');
+    const contents = await readTextFile(join(cwd, '.env'), 'utf8');
     for (const line of contents.split(/\r?\n/)) {
       const match = line.match(/^\s*(?:export\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
       if (!match || match[1] in process.env) continue;
@@ -60,6 +61,18 @@ async function loadLocalEnv(cwd) {
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
+}
+
+async function readProjectFile(cwd, filePath, offset = 0, limit) {
+  const root = resolve(cwd);
+  const absolute = resolve(cwd, filePath);
+  const relativePath = relative(root, absolute);
+  if (relativePath.startsWith('..') || relativePath.includes(':')) throw new Error('Learned reads must stay inside the project');
+  const contents = await readTextFile(absolute, 'utf8');
+  const lines = contents.split(/\r?\n/);
+  const start = Number.isSafeInteger(offset) && offset > 0 ? offset : 0;
+  const end = Number.isSafeInteger(limit) && limit > 0 ? start + limit : lines.length;
+  return lines.slice(start, end).join('\n');
 }
 
 function evaluationForEnvironment() {
@@ -91,17 +104,27 @@ export default async function jbrancherPiExtension(pi) {
   async function load(cwd) {
     await loadLocalEnv(cwd);
     config = await loadConfig(cwd);
+    const requestedMode = process.env.JBRANCHER_PI_MODE || config.mode || 'active';
+    const mode = requestedMode === 'learning' ? 'active' : requestedMode;
+    const learningEnabled = requestedMode === 'learning'
+      || process.env.JBRANCHER_PI_LEARNING === '1'
+      || config.learning === true;
+    if (!['active', 'shadow'].includes(mode)) throw new TypeError('JBRANCHER_PI_MODE must be active, shadow, or learning');
+    const learning = learningEnabled ? createLocalLearningStore({
+      directory: config.learningDirectory ? resolve(cwd, config.learningDirectory) : join(cwd, '.jbrancher')
+    }) : null;
+    const learnedRecords = learning ? (await learning.readRoutes()).filter(route => route.status === 'active') : [];
     const routes = [
       ...(config.includeBuiltins === false ? [] : builtInRoutes()),
-      ...(config.routes ?? [])
+      ...(config.routes ?? []),
+      ...createLearnedRoutes(learnedRecords)
     ];
     const evaluate = evaluationForEnvironment();
-    const mode = process.env.JBRANCHER_PI_MODE || config.mode || 'active';
-    if (!['active', 'shadow'].includes(mode)) throw new TypeError('JBRANCHER_PI_MODE must be active or shadow');
     runtime = {
       mode,
       evaluate,
       routes,
+      learning: { enabled: learningEnabled, store: learning, pending: null, learnedRecords },
       router: createPiRouter({
         routes,
         evaluate,
@@ -115,7 +138,7 @@ export default async function jbrancherPiExtension(pi) {
     try {
       await load(ctx.cwd);
       if (ctx.hasUI) ctx.ui.setStatus(STATUS_ID, `JBrancher: ${runtime.routes.length} deterministic routes`);
-      notify(ctx, `JBrancher loaded ${runtime.routes.length} deterministic route(s). Non-matches stay on Pi's frontier model.`);
+      notify(ctx, `JBrancher loaded ${runtime.routes.length} deterministic route(s).${runtime.learning.enabled ? ' Local learning is on.' : ' Non-matches stay on Pi\'s frontier model.'}`);
     } catch (error) {
       runtime = null;
       notify(ctx, `JBrancher disabled: ${error instanceof Error ? error.message : String(error)}`, 'warning');
@@ -134,13 +157,23 @@ export default async function jbrancherPiExtension(pi) {
 
   pi.on('input', async (event, ctx) => {
     if (event.source === 'extension' || !runtime) return { action: 'continue' };
+    if (runtime.learning.enabled) {
+      runtime.learning.pending = {
+        task: event.text,
+        cwd: ctx.cwd,
+        source: event.source || 'interactive',
+        startedAt: new Date().toISOString(),
+        toolCalls: []
+      };
+    }
     let outcome;
     try {
       outcome = await runtime.router.handle({
         task: event.text,
         state: { cwd: ctx.cwd, mode: ctx.mode },
         signal: ctx.signal,
-        exec: (program, args = []) => pi.exec(program, args)
+        exec: (program, args = []) => pi.exec(program, args),
+        readFile: (filePath, offset, limit) => readProjectFile(ctx.cwd, filePath, offset, limit)
       });
     } catch (error) {
       stats.failed++;
@@ -158,6 +191,7 @@ export default async function jbrancherPiExtension(pi) {
       return { action: 'continue' };
     }
     stats.handled++;
+    if (runtime.learning.enabled) runtime.learning.pending = null;
     const content = `[JBrancher · ${outcome.source} · ${outcome.routeId}]\n${formatPiResult(outcome.result)}`;
     const isPrintMode = !isJsonInvocation(ctx)
       && (ctx.mode === 'print' || (ctx.mode === undefined && ctx.hasUI === false));
@@ -176,10 +210,63 @@ export default async function jbrancherPiExtension(pi) {
     return { action: 'handled' };
   });
 
+  pi.on('tool_call', async event => {
+    const pending = runtime?.learning?.pending;
+    if (!pending) return;
+    pending.toolCalls.push({
+      toolCallId: event.toolCallId,
+      toolName: event.toolName,
+      input: event.input
+    });
+  });
+
+  pi.on('tool_result', async event => {
+    const pending = runtime?.learning?.pending;
+    const call = pending?.toolCalls.find(item => item.toolCallId === event.toolCallId);
+    if (!call) return;
+    call.ok = !event.isError;
+    call.output = Array.isArray(event.content)
+      ? event.content.filter(item => item?.type === 'text').map(item => item.text).join('\n').slice(0, 500)
+      : undefined;
+  });
+
+  pi.on('agent_end', async (_event, ctx) => {
+    const learning = runtime?.learning;
+    const pending = learning?.pending;
+    if (!learning?.enabled || !pending) return;
+    const mode = ctx.mode;
+    const cwd = pending.cwd;
+    const outcome = pending.toolCalls.length > 0 && pending.toolCalls.every(call => call.ok === true)
+      ? 'success' : 'unknown';
+    try {
+      await learning.store.appendTrace({ ...pending, outcome, metadata: { mode } });
+      await learning.store.writeDataset();
+      if (outcome === 'success' && config.autoPromoteReadOnly !== false) {
+        const routes = await learning.store.refreshCandidates({
+          minimumObservations: Number(config.minimumObservations || 2)
+        });
+        const promotable = routes.filter(route => route.status === 'candidate'
+          && route.safety === 'read-only'
+          && route.observations >= Number(config.minimumObservations || 2));
+        for (const route of promotable) await learning.store.promote(route.id);
+        if (promotable.length > 0) {
+          await load(cwd);
+          // Do not touch the agent context after an awaited reload: print-mode
+          // sessions may already be replacing or shutting down their context.
+        }
+      }
+    } catch (error) {
+      notify(ctx, `JBrancher learning trace failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');
+    } finally {
+      learning.pending = null;
+    }
+  });
+
   pi.registerCommand('jbrancher', {
     description: 'Show or reload JBrancher deterministic routing',
     handler: async (args, ctx) => {
-      if ((args || '').trim() === 'reload') {
+      const command = (args || '').trim();
+      if (command === 'reload') {
         try {
           await load(ctx.cwd);
           notify(ctx, `JBrancher reloaded ${runtime.routes.length} deterministic route(s).`);
@@ -188,8 +275,47 @@ export default async function jbrancherPiExtension(pi) {
         }
         return;
       }
+      if (command === 'learn' || command === 'candidates') {
+        if (!runtime?.learning.enabled) {
+          notify(ctx, 'Enable local learning with JBRANCHER_PI_LEARNING=1 or JBRANCHER_PI_MODE=learning.');
+          return;
+        }
+        const routes = await runtime.learning.store.refreshCandidates({
+          minimumObservations: Number(config.minimumObservations || 2)
+        });
+        const candidates = routes.filter(route => route.status === 'candidate');
+        notify(ctx, candidates.length
+          ? `Learned ${candidates.length} candidate route(s): ${candidates.map(route => `${route.id} [${route.safety}]`).join(', ')}`
+          : 'No repeated successful workflows are ready to become candidates.');
+        return;
+      }
+      if (command === 'export' || command === 'dataset') {
+        if (!runtime?.learning.enabled) {
+          notify(ctx, 'Enable local learning before exporting the local dataset.');
+          return;
+        }
+        const dataset = await runtime.learning.store.writeDataset();
+        notify(ctx, `Exported ${dataset.examples.length} redacted episode(s) to ${dataset.path}.`);
+        return;
+      }
+      if (command.startsWith('promote ')) {
+        if (!runtime?.learning.enabled) {
+          notify(ctx, 'Enable local learning before promoting routes.');
+          return;
+        }
+        try {
+          const id = command.slice('promote '.length).trim();
+          const promoted = await runtime.learning.store.promote(id);
+          await load(ctx.cwd);
+          notify(ctx, `Promoted ${promoted.id}; it is now active for exact matching.`);
+        } catch (error) {
+          notify(ctx, `Promotion failed: ${error instanceof Error ? error.message : String(error)}`, 'error');
+        }
+        return;
+      }
       const routeNames = runtime?.routes.map(route => route.id).join(', ') || 'none';
-      notify(ctx, `JBrancher ${runtime?.mode || 'inactive'} · routes: ${routeNames} · handled: ${stats.handled} · frontier: ${stats.fallback} · Jev choices: ${stats.jev}`);
+      const learningText = runtime?.learning.enabled ? ` · learning: local (${runtime.learning.store.directory})` : '';
+      notify(ctx, `JBrancher ${runtime?.mode || 'inactive'} · routes: ${routeNames} · handled: ${stats.handled} · frontier: ${stats.fallback} · Jev choices: ${stats.jev}${learningText}`);
     }
   });
 }

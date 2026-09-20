@@ -26,12 +26,14 @@
     "doctor": "node bin/jbrancher.js doctor",
     "live:smoke": "node bin/jbrancher.js live-check",
     "bench:offline": "node benchmarks/run-routing.js",
-    "bench:tokens": "node benchmarks/run-token-optimization.js"
+    "bench:tokens": "node benchmarks/run-token-optimization.js",
+    "bench:learning": "node benchmarks/run-learning.js"
   },
   "exports": {
     ".": "./src/index.js",
     "./context": "./src/context.js",
     "./jev": "./src/jev.js",
+    "./learning": "./src/learning.js",
     "./pi": "./src/pi.js",
     "./server": "./src/server.js"
   },
@@ -45,6 +47,7 @@
     "bin",
     "extensions",
     "examples",
+    "benchmarks",
     "docs",
     "README.md",
     ".env.example",
