@@ -218,6 +218,39 @@ test('generic brancher replays a learned multi-step read workflow only when each
   }
 });
 
+test('generic brancher revalidates learned workflows and quarantines a failed postcondition', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-replay-outcome-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const createBrancher = options => createJBrancher({
+      getCandidates: async ({ state }) => state.phase === 0
+        ? [{ tool: 'read', args: { path: 'package.json' } }]
+        : state.phase === 1 ? [{ tool: 'read', args: { path: 'README.md' } }] : [],
+      actor: async ({ state }) => state.phase === 0
+        ? { action: { tool: 'read', args: { path: 'package.json' } } }
+        : state.phase === 1
+          ? { action: { tool: 'read', args: { path: 'README.md' } } }
+          : { action: null },
+      execute: async action => 'contents of ' + action.args.path,
+      learningStore: store,
+      ...options
+    });
+    const observe = async ({ state }) => ({ phase: state.phase + 1 });
+    await createBrancher().run({ task: 'Inspect project files', state: { phase: 0 }, observe });
+    await createBrancher().run({ task: 'Inspect project files', state: { phase: 0 }, observe });
+    const replay = await createBrancher({ learningOutcome: () => false }).run({
+      task: 'Inspect project files',
+      state: { phase: 0 },
+      observe
+    });
+    assert.equal(replay.learningOutcome, 'unknown');
+    assert.equal(replay.learnedRouteQuarantined, true);
+    assert.equal((await store.readRoutes()).every(route => route.status === 'quarantined'), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('decision service exposes health, decisions, and stats without exposing credentials', async () => {
   const service = createJBrancherServer({
     evaluate: async () => ({ scores: [0.94, 0.12], usage: [{ provider: 'test', status: 'succeeded' }] })

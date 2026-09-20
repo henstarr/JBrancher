@@ -127,6 +127,8 @@ test('safe inspection commands can be learned while shell escapes and sensitive 
   assert.equal(classifyActionSafety('bash', { command: 'cat .env' }), 'side-effect-or-unknown');
   assert.equal(classifyActionSafety('bash', { command: 'cat ../secrets.txt' }), 'side-effect-or-unknown');
   assert.equal(classifyActionSafety('bash', { command: 'rg TODO src && rm -rf build' }), 'side-effect-or-unknown');
+  assert.equal(classifyActionSafety('bash', { command: 'find . -delete' }), 'side-effect-or-unknown');
+  assert.equal(classifyActionSafety('bash', { command: 'rg --pre=./scanner TODO src' }), 'side-effect-or-unknown');
 });
 
 test('learned inspection commands replay through the Pi executor', async () => {
@@ -224,6 +226,7 @@ test('sensitive or out-of-project reads are never replayable learned routes', ()
   ];
   const [candidate] = proposeRoutes(traces);
   assert.equal(candidate.safety, 'side-effect-or-unknown');
+  assert.equal(classifyActionSafety('read', { path: 'password.txt' }), 'side-effect-or-unknown');
   candidate.status = 'active';
   assert.deepEqual(createLearnedRoutes([candidate]), []);
 });

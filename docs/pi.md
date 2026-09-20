@@ -151,7 +151,9 @@ If an active learned route later fails, it is marked `quarantined`, removed from
 the active route set, and the prompt falls back to Pi. This prevents a stale
 route from becoming a repeated failure loop. Re-promoting a quarantined route
 requires an explicit `force` call through the learning API after the underlying
-problem has been reviewed.
+problem has been reviewed. The frontier recovery for that same prompt is
+recorded as a new local episode, so route failures add evidence instead of
+silently disappearing.
 
 Learned routes currently support exact normalized prompts and conservative
 token-similarity matches for one or more repeated `read` actions, plus a

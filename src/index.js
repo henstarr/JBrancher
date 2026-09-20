@@ -288,7 +288,7 @@ export function createJBrancher({
       if (typeof input.observe !== 'function') break;
       state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
     }
-    return { events, state, history };
+    return { events, state, history, learningRouteId: workflows[0].id };
   }
 
   async function run(input = {}) {
@@ -306,7 +306,23 @@ export function createJBrancher({
       : null;
     try {
       const learnedRun = await replayLearnedWorkflow(input, state, history);
-      if (learnedRun) return learnedRun;
+      if (learnedRun) {
+        const replayOutcome = await validatedOutcome({
+          task: input.task,
+          state: learnedRun.state,
+          history: learnedRun.history,
+          events: learnedRun.events
+        });
+        if (replayOutcome && replayOutcome !== 'success') {
+          if (typeof learningStore?.recordRouteFailure === 'function') {
+            await learningStore.recordRouteFailure(learnedRun.learningRouteId, {
+              reason: 'Harness postcondition rejected learned replay'
+            }).catch(() => {});
+          }
+          return { ...learnedRun, learningOutcome: replayOutcome, learnedRouteQuarantined: true };
+        }
+        return learnedRun;
+      }
       for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
         const event = await executeStep({ ...input, state, history, step: stepNumber }, recorder);
         events.push(event);

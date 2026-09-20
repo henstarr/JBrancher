@@ -185,10 +185,16 @@ export default async function jbrancherPiExtension(pi) {
     if (!outcome.routeId) {
       if (outcome.failedRouteId && runtime.learning.enabled
         && typeof runtime.learning.store.recordRouteFailure === 'function') {
-        runtime.learning.pending = null;
         try {
           await runtime.learning.store.recordRouteFailure(outcome.failedRouteId, { reason: outcome.error });
           await load(ctx.cwd);
+          runtime.learning.pending = createEpisodeRecorder({
+            store: runtime.learning.store,
+            task: event.text,
+            cwd: ctx.cwd,
+            source: event.source || 'interactive',
+            metadata: { fallbackAfterRouteFailure: outcome.failedRouteId }
+          });
         } catch (error) {
           notify(ctx, `JBrancher route quarantine failed: ${error instanceof Error ? error.message : String(error)}`, 'warning');
         }

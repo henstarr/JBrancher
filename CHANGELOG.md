@@ -26,6 +26,8 @@
 - Add open-world local learning: successful non-registered fallback episodes are
   captured as dataset rows and reviewable candidates on first observation, while
   automatic execution still requires repeated safe evidence.
+- Revalidate learned multi-step workflows against the current harness
+  postcondition and capture frontier recovery after a quarantined Pi route.
 - Add active context optimization with bounded Jev relevance scoring, required-context
   preservation, token budgets, local fallback, and a token-usage hill-climb benchmark.
 - Add `jbrancher wrap codex --prompt "task"` for bounded command-event shadow

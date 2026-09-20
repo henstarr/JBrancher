@@ -15,7 +15,7 @@ const ROUTE_ACTION_WORDS = new Set([
 ]);
 const READ_INTENT = /\b(read|open|show|view|inspect|display|look|list|cat|contents?|inside)\b/i;
 const WRITE_INTENT = /\b(delete|remove|write|edit|modify|change|update|create|run|execute|deploy|install)\b/i;
-const SENSITIVE_READ_PATH = /(^|[\\/])(?:\.env(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|.*\.(?:pem|key|p12|pfx))$/i;
+const SENSITIVE_READ_PATH = /(^|[\\/])(?:\.env(?:\.[^\\/]+)*|credentials?(?:\.[^\\/]+)*|secrets?(?:\.[^\\/]+)*|passwords?(?:\.[^\\/]+)*|tokens?(?:\.[^\\/]+)*|[^\\/]*\.(?:pem|key|p12|pfx))$/i;
 
 export function redactText(value, maxChars = 2000) {
   if (typeof value !== 'string') return value;
@@ -91,10 +91,11 @@ function safeInspectionCommand(command) {
   if (typeof command !== 'string' || command.length > 800) return false;
   if (/[;&|$><\x60\r\n]/.test(command)) return false;
   if (/(^|[\s/'\x60])(?:[A-Za-z]:[\\/]|[\\/]{1,2}|\.\.(?:[\\/]|$))/.test(command)) return false;
-  if (/(^|[\s/'\x60])(?:\.env(?:\b|[./])|credentials?(?:\b|[./])|secrets?(?:\b|[./])|[^\s/'\x60]+\.(?:pem|key|p12|pfx))(?:$|[\s/'\x60])/i.test(command)) {
+  if (/(^|[\s/'\x60])(?:\.env(?:\b|[./])|credentials?(?:\b|[./])|secrets?(?:\b|[./])|passwords?(?:\b|[./])|tokens?(?:\b|[./])|[^\s/'\x60]+\.(?:pem|key|p12|pfx))(?:$|[\s/'\x60])/i.test(command)) {
     return false;
   }
-  if (/(^|\s)(?:-i|--in-place|--follow-symlinks)(?:\s|$)/.test(command)) return false;
+  if (/(^|\s)(?:-i|--in-place|--follow-symlinks|-delete|-exec(?:dir)?|-ok(?:dir)?|-fprint(?:f)?|-fls)(?=\s|$)/.test(command)
+    || /(^|\s)(?:--pre|--hostname-bin)(?:=|\s)/.test(command)) return false;
   return /^(?:ls|find|rg|grep|cat|head|tail|sed)(?:\s|$)/.test(command);
 }
 

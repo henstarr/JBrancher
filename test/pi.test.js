@@ -248,7 +248,7 @@ test('Pi learning mode promotes a path template and handles a new file request',
   }
 });
 
-test('Pi quarantines a learned route that fails and avoids an empty fallback trace', async () => {
+test('Pi quarantines a learned route and records the frontier recovery trace', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-pi-quarantine-test-'));
   const store = createLocalLearningStore({ directory: join(directory, '.jbrancher') });
   await store.writeRoutes([{
@@ -281,6 +281,13 @@ test('Pi quarantines a learned route that fails and avoids an empty fallback tra
     const result = await handlers.get('input')({ text: 'read missing.txt', source: 'interactive' }, ctx);
     assert.deepEqual(result, { action: 'continue' });
     assert.equal((await store.readRoutes())[0].status, 'quarantined');
+    await handlers.get('tool_call')({ toolCallId: 'fallback', toolName: 'read', input: { path: 'package.json' } });
+    await handlers.get('tool_result')({ toolCallId: 'fallback', isError: false, content: [{ type: 'text', text: 'recovered' }] });
+    await handlers.get('agent_end')({}, ctx);
+    const traces = await store.readTraces();
+    assert.equal(traces.length, 1);
+    assert.equal(traces[0].metadata.fallbackAfterRouteFailure, 'learned-stale-read');
+    assert.equal(traces[0].outcome, 'success');
   } finally {
     if (previousMode === undefined) delete process.env.JBRANCHER_PI_MODE;
     else process.env.JBRANCHER_PI_MODE = previousMode;

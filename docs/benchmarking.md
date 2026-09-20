@@ -96,6 +96,12 @@ controls do not receive different experience. Prefer supplying
 `learningOutcome` from the same verifier/postcondition used by the harness so
 tool success is not confused with task success.
 
+Learned multi-step replays are sent through the same postcondition on every
+run. If it rejects a replay, JBrancher quarantines the route so the next
+attempt returns to the actor. In Pi, a route failure starts a fresh recorder
+for the frontier recovery, preserving the recovery trajectory in the local
+dataset.
+
 ## Terminal-Bench / Harbor
 
 Harbor is the current harness for running Terminal-Bench 2.0. The right integration is a custom Harbor agent that owns the normal terminal loop and invokes JBrancher at the next-action boundary. Keep the benchmark task and verifier unchanged.
