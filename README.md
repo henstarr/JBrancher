@@ -627,6 +627,9 @@ This makes a bounded live request only for the warm-up decisions, then reports
 actual Jev input/output usage and the authorized local-route coverage. It does
 not run the official SWE-bench grader or print credentials.
 
+The latest one-task live verification is recorded in
+[docs/live-learning-1task-2026-09-20.md](docs/live-learning-1task-2026-09-20.md).
+
 To benchmark the language-agnostic open-world bridge, run:
 
 ```sh
