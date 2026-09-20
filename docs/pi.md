@@ -186,8 +186,8 @@ dataset append, candidate mining, and promotion policy.
 
 For a harness that uses the generic runtime instead of Pi, pass the same store
 as `learningStore` to `createJBrancher`. `step()` records one fallback action;
-`run()` records the whole fallback workflow as one episode and automatically
-refreshes safe local routes:
+`run()` records the whole fallback workflow as one episode and can replay a
+proven multi-step read-only workflow, automatically refreshing safe local routes:
 
 ```js
 const brancher = createJBrancher({

@@ -221,7 +221,8 @@ Pass the local learning store to `createJBrancher` when you want an unknown
 actor decision to become a reusable example. JBrancher records only actions
 that the actor fallback actually selected and that your `execute` function
 completed. After repeated successful examples, safe single-step routes are
-loaded back into the same decision boundary automatically:
+loaded back into the same decision boundary automatically. `run()` can also
+replay a proven multi-step read-only workflow:
 
 ```js
 import { createJBrancher } from 'jbrancher';
@@ -242,7 +243,9 @@ The harness still authorizes every action: a learned action is used only when
 it matches the current task and is present in the candidate set returned by
 `getCandidates`. Otherwise the normal Jev/actor path runs. Learning is local,
 redacted, and advisory; set `learningAutoPromote: false` if candidates should
-always require manual promotion.
+always require manual promotion. Multi-step replay applies the same check at
+every step and abandons the learned workflow before execution if any step is
+no longer legal.
 
 ### Reduce context tokens before a model call
 

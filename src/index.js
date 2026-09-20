@@ -1,4 +1,4 @@
-import { createEpisodeRecorder, findLearnedActions, refreshAndPromoteReadOnly } from './learning.js';
+import { createEpisodeRecorder, findLearnedActions, findLearnedWorkflows, refreshAndPromoteReadOnly } from './learning.js';
 
 const clone = value => structuredClone(value);
 
@@ -206,6 +206,52 @@ export function createJBrancher({
     }
   }
 
+  async function replayLearnedWorkflow(input, initialState, initialHistory) {
+    if (!learningStore || !getCandidates || !execute || typeof learningStore.readRoutes !== 'function') return null;
+    const task = String(input.task ?? '');
+    let workflows;
+    try {
+      workflows = findLearnedWorkflows(await learningStore.readRoutes(), task);
+    } catch {
+      return null;
+    }
+    if (workflows.length !== 1 || workflows[0].actions.length > maxSteps) return null;
+    if (workflows[0].actions.length > 1 && typeof input.observe !== 'function') return null;
+
+    let state = clone(initialState);
+    let history = clone(initialHistory);
+    const events = [];
+    for (let stepNumber = 0; stepNumber < workflows[0].actions.length; stepNumber++) {
+      const action = workflows[0].actions[stepNumber];
+      let candidates;
+      try {
+        candidates = await getCandidates({ state: clone(state), task, history: clone(history), signal: input.signal });
+      } catch {
+        return null;
+      }
+      if (!Array.isArray(candidates) || !candidates.some(candidate => sameAction(candidate, action))) return null;
+      const decision = { source: 'learned', action: clone(action), routeId: workflows[0].id,
+        reason: 'A proven local read-only workflow matched', usage: [] };
+      const event = { step: stepNumber, state: clone(state), decision: clone(decision) };
+      try {
+        event.result = await execute(clone(action), {
+          state: clone(state), task, history: clone(history), signal: input.signal
+        });
+      } catch (error) {
+        if (typeof learningStore.recordRouteFailure === 'function') {
+          await learningStore.recordRouteFailure(workflows[0].id, { reason: error?.message || String(error) }).catch(() => {});
+        }
+        return null;
+      }
+      await onEvent(clone(event));
+      events.push(event);
+      history = [...history, event];
+      if (typeof input.observe !== 'function') break;
+      state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
+    }
+    return { events, state, history };
+  }
+
   async function run(input = {}) {
     let state = clone(input.state ?? {});
     let history = clone(input.history ?? []);
@@ -214,6 +260,8 @@ export function createJBrancher({
       ? createEpisodeRecorder({ store: learningStore, task: String(input.task ?? ''), cwd: learningCwd, source: learningSource })
       : null;
     try {
+      const learnedRun = await replayLearnedWorkflow(input, state, history);
+      if (learnedRun) return learnedRun;
       for (let stepNumber = 0; stepNumber < maxSteps; stepNumber++) {
         const event = await executeStep({ ...input, state, history, step: stepNumber }, recorder);
         events.push(event);

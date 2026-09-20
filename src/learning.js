@@ -252,6 +252,24 @@ export function createLearnedActions(records = [], task = '') {
   return findLearnedActions(records, task).map(match => match.action);
 }
 
+/**
+ * Return safe multi-step learned workflows for a generic harness.
+ * The caller must authorize every returned action against its current state.
+ */
+export function findLearnedWorkflows(records = [], task = '') {
+  if (!Array.isArray(records)) throw new TypeError('records must be an array');
+  if (typeof task !== 'string') throw new TypeError('task must be a string');
+  return records.map(record => {
+    if (record?.status !== 'active' || record.safety !== 'read-only') return null;
+    const actions = actionsFromRecord(record);
+    if (actions.length < 2 || record.matcher?.type === 'read-path' || !matchesStoredMatcher(record.matcher, task)) return null;
+    return {
+      id: record.id,
+      actions: actions.map(action => ({ tool: action.toolName, args: action.input }))
+    };
+  }).filter(Boolean);
+}
+
 export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {
   if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
   const actionGroups = new Map();

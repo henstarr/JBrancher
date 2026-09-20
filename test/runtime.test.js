@@ -134,6 +134,38 @@ test('generic brancher records unknown actor fallback episodes in a local store'
   }
 });
 
+test('generic brancher replays a learned multi-step read workflow only when each step remains allowed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-workflow-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    let actorCalls = 0;
+    const createBrancher = () => createJBrancher({
+      getCandidates: async ({ state }) => state.phase === 0
+        ? [{ tool: 'read', args: { path: 'package.json' } }]
+        : state.phase === 1 ? [{ tool: 'read', args: { path: 'README.md' } }] : [],
+      actor: async ({ state }) => {
+        actorCalls++;
+        if (state.phase === 0) return { action: { tool: 'read', args: { path: 'package.json' } } };
+        if (state.phase === 1) return { action: { tool: 'read', args: { path: 'README.md' } } };
+        return { action: null };
+      },
+      execute: async action => `contents of ${action.args.path}`,
+      learningStore: store,
+      learningCwd: directory
+    });
+    const observe = async ({ state }) => ({ phase: state.phase + 1 });
+    await createBrancher().run({ task: 'Inspect the project files', state: { phase: 0 }, observe });
+    await createBrancher().run({ task: 'Inspect the project files', state: { phase: 0 }, observe });
+    assert.equal(actorCalls, 6);
+    assert.equal((await store.readRoutes()).some(route => route.status === 'active' && route.action?.actions), true);
+    const replay = await createBrancher().run({ task: 'Inspect the project files', state: { phase: 0 }, observe });
+    assert.deepEqual(replay.events.map(event => event.decision.source), ['learned', 'learned']);
+    assert.equal(actorCalls, 6);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('decision service exposes health, decisions, and stats without exposing credentials', async () => {
   const service = createJBrancherServer({
     evaluate: async () => ({ scores: [0.94, 0.12], usage: [{ provider: 'test', status: 'succeeded' }] })

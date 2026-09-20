@@ -95,13 +95,17 @@ async function benchmarkPathTemplate(store) {
 
 async function benchmarkGenericHarness(instance, store) {
   const tasks = benchmarkTasks(instance);
-  const expectedPath = instance.fail_to_pass[0];
+  const expectedPaths = [instance.fail_to_pass[0], 'README.md'];
   let actorCalls = 0;
   const brancher = createJBrancher({
-    getCandidates: async () => [{ tool: 'read', args: { path: expectedPath } }],
-    actor: async () => {
+    getCandidates: async ({ state }) => state.phase === 0
+      ? [{ tool: 'read', args: { path: expectedPaths[0] } }]
+      : state.phase === 1 ? [{ tool: 'read', args: { path: expectedPaths[1] } }] : [],
+    actor: async ({ state }) => {
       actorCalls++;
-      return { action: { tool: 'read', args: { path: expectedPath } } };
+      if (state.phase === 0) return { action: { tool: 'read', args: { path: expectedPaths[0] } } };
+      if (state.phase === 1) return { action: { tool: 'read', args: { path: expectedPaths[1] } } };
+      return { action: null };
     },
     execute: async action => `fixture contents for ${action.args.path}`,
     learningStore: store,
@@ -112,17 +116,24 @@ async function benchmarkGenericHarness(instance, store) {
     const task = attempt <= warmupAttempts
       ? tasks.warmup[(attempt - 1) % tasks.warmup.length]
       : tasks.reuse;
-    const event = await brancher.step({ task });
+    const result = await brancher.run({
+      task,
+      state: { phase: 0 },
+      observe: async ({ state }) => ({ phase: state.phase + 1 })
+    });
     rows.push({
       attempt,
-      source: event.decision.source,
-      correct: event.result === `fixture contents for ${expectedPath}`
+      sources: result.events.map(event => event.decision.source),
+      correct: result.events.length >= expectedPaths.length
+        && result.events.slice(0, expectedPaths.length).every((event, index) =>
+          event.result === `fixture contents for ${expectedPaths[index]}`)
     });
   }
   return {
     instance_id: instance.instance_id,
+    baselineActorCalls: repetitions * (expectedPaths.length + 1),
     actorCalls,
-    learnedCalls: repetitions - actorCalls,
+    learnedCalls: repetitions * (expectedPaths.length + 1) - actorCalls,
     rows
   };
 }
@@ -140,6 +151,8 @@ try {
   const learnedFrontierCalls = rows.reduce((sum, row) => sum + row.frontierCalls, 0);
   const savedPromptTokens = rows.reduce((sum, row) => sum + row.savedPromptTokens, 0);
   const outcomes = rows.flatMap(row => row.rows);
+  const genericBaselineActorCalls = genericRows.reduce((sum, row) => sum + row.baselineActorCalls, 0);
+  const genericLearnedActorCalls = genericRows.reduce((sum, row) => sum + row.actorCalls, 0);
   const pathTemplate = await benchmarkPathTemplate(pathTemplateStore);
   console.log(JSON.stringify({
     benchmark: 'JBrancher local learning replay on SWE-bench Lite bug prompts',
@@ -163,11 +176,11 @@ try {
       estimatedPromptTokensSaved: savedPromptTokens
     },
     genericHarness: {
-      baselineActorCalls: fixture.instances.length * repetitions,
-      learnedActorCalls: genericRows.reduce((sum, row) => sum + row.actorCalls, 0),
-      actorCallsAvoided: fixture.instances.length * repetitions - genericRows.reduce((sum, row) => sum + row.actorCalls, 0),
-      actorCallReduction: Number(((fixture.instances.length * repetitions - genericRows.reduce((sum, row) => sum + row.actorCalls, 0))
-        / (fixture.instances.length * repetitions)).toFixed(3)),
+      baselineActorCalls: genericBaselineActorCalls,
+      learnedActorCalls: genericLearnedActorCalls,
+      actorCallsAvoided: genericBaselineActorCalls - genericLearnedActorCalls,
+      actorCallReduction: Number(((genericBaselineActorCalls - genericLearnedActorCalls)
+        / genericBaselineActorCalls).toFixed(3)),
       routeCoverage: genericRows.flatMap(row => row.rows).every(row => row.correct) ? 1 : 0,
       rows: genericRows
     },
