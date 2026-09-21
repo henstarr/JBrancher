@@ -598,7 +598,12 @@ const evaluate = createJevEvaluator({
 });
 ```
 
-The adapter uses TypeSafe’s System One HTTP endpoint and a pinned model identifier. Set the API key locally; do not place it in traces, candidate metadata, or commits. The network adapter is opt-in through construction and should be used with explicit timeouts and bounded evaluation budgets.
+The adapter uses TypeSafe’s System One HTTP endpoint and a pinned model
+identifier. Route selection uses a Choice question with a no-match branch by
+default; pass `questionType: 'noul'` only for compatibility with older
+integrations. Set the API key locally; do not place it in traces, candidate
+metadata, or commits. The network adapter is opt-in through construction and
+should be used with explicit timeouts and bounded evaluation budgets.
 
 ## Why this placement matters
 
@@ -658,6 +663,8 @@ The latest one-task live verification is recorded in
 [docs/live-learning-1task-2026-09-20.md](docs/live-learning-1task-2026-09-20.md).
 The latest three-task Pi preference-learning run is recorded in
 [docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
+The full 14-task Choice-evaluator run is recorded in
+[docs/live-pi-14tasks-2026-09-20.md](docs/live-pi-14tasks-2026-09-20.md).
 
 To benchmark the language-agnostic open-world bridge, run:
 
@@ -669,6 +676,14 @@ This sends SWE-bench-derived tasks through the local HTTP proxy, records two
 frontier episodes per task, then verifies that later authorized decisions are
 served by learned local routes without evaluator calls. It requires no API key
 and uses a temporary local store.
+
+For the live Pi route-choice benchmark, calibrate thresholds explicitly and
+keep assertions enabled:
+
+```sh
+npm run bench:live-pi-learning -- --instances 14 --repetitions 4 \
+  --min-probability 0.45 --min-margin 0.05 --assert
+```
 
 For end-to-end evidence, use the same agent, model, task set, Docker image, timeout, and retry budget in paired runs. The recommended progression is:
 

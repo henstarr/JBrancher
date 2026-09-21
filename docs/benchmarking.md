@@ -184,8 +184,20 @@ npm run bench:live-pi-learning -- --instances 1 --repetitions 4
 
 It promotes a preference only when the deterministic route verifier returns
 the expected result, then reports real Jev calls, usage, and learned coverage.
-The latest checked-in Pi result is summarized in
-[docs/live-pi-learning-2026-09-20.md](live-pi-learning-2026-09-20.md).
+The evaluator uses a Choice distribution with a no-match option. To reproduce
+the full checked-in calibration run with assertions:
+
+```sh
+npm run bench:live-pi-learning -- --instances 14 --repetitions 4 \
+  --min-probability 0.45 --min-margin 0.05 --assert
+```
+
+The threshold values are measured for this fixture and should be recalibrated
+against a harness-native validation set before being used for side effects.
+The latest three-task sample is summarized in
+[docs/live-pi-3tasks-2026-09-20.md](live-pi-3tasks-2026-09-20.md), and the full
+14-task result is in
+[docs/live-pi-14tasks-2026-09-20.md](live-pi-14tasks-2026-09-20.md).
 
 The fixture compares three controls:
 

@@ -71,9 +71,11 @@ to Pi rather than fabricating a successful result.
 ## Jev and fallback behavior
 
 Jev is only called when two or more registered routes match the same prompt. It
-receives the task and the bounded candidate route IDs, never an open-ended tool
-space. A route is handled only when the winning score meets
-`minimumProbability` and clears `minimumMargin` over the runner-up.
+receives the task and bounded route candidates, never an open-ended tool space.
+The default evaluator uses a TypeSafe Choice question with an explicit
+`no_match` option. A route is handled only when the winning candidate meets
+`minimumProbability` and clears `minimumMargin` over both the runner-up and
+`no_match`; otherwise Pi receives the original prompt.
 
 Set the key in the environment before starting Pi, or put it in the project's
 ignored `.env` file. The extension loads a local `.env` without overwriting
@@ -92,6 +94,11 @@ JBRANCHER_PI_JEV_TIMEOUT_MS=3000
 JBRANCHER_PI_MIN_PROBABILITY=0.7
 JBRANCHER_PI_MIN_MARGIN=0.15
 ```
+
+For the checked-in SWE-bench-derived route benchmark, an explicitly calibrated
+profile of `0.45` probability and `0.05` margin achieved full verified coverage.
+Treat those values as a task-set measurement, not a universal production
+default; calibrate them against the cost of a wrong route in your own harness.
 
 If no key is present, a single matching route still executes deterministically;
 multiple matches fall back to Pi. If Jev is unavailable, malformed, or

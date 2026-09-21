@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,15 @@ function numericFlag(name, fallback, { min, max }) {
   return value;
 }
 
+function decimalFlag(name, fallback, { min, max }) {
+  const index = process.argv.indexOf(name);
+  const value = index === -1 ? fallback : Number(process.argv[index + 1]);
+  if (!Number.isFinite(value) || value < min || value > max) {
+    throw new Error(`${name} must be a number from ${min} to ${max}`);
+  }
+  return value;
+}
+
 function sumUsage(rows) {
   return rows.reduce((total, usage) => ({
     inputTokens: total.inputTokens + (Number.isSafeInteger(usage.inputTokens) ? usage.inputTokens : 0),
@@ -32,6 +42,8 @@ if (!process.env.TYPESAFE_API_KEY) {
 
 const instanceCount = numericFlag('--instances', 1, { min: 1, max: fixture.instances.length });
 const repetitions = numericFlag('--repetitions', 4, { min: 3, max: 10 });
+const minimumProbability = decimalFlag('--min-probability', 0.7, { min: 0, max: 1 });
+const minimumMargin = decimalFlag('--min-margin', 0.15, { min: 0, max: 1 });
 const instances = fixture.instances.slice(0, instanceCount);
 const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-live-pi-learning-'));
 const usageRows = [];
@@ -66,6 +78,8 @@ try {
       routes,
       prefer: async ({ task: currentTask, matched }) =>
         (await store.findPreference(currentTask, matched))?.routeId,
+      minimumProbability,
+      minimumMargin,
       evaluate: async input => {
         evaluatorCalls++;
         const result = await evaluateWithUsage(input);
@@ -86,6 +100,8 @@ try {
         source: result.source,
         routeId: result.routeId,
         correct,
+        reason: result.reason ?? null,
+        scores: result.scores ?? null,
         elapsedMs: Number((performance.now() - startedAt).toFixed(1)),
         usage: result.usage ?? []
       });
@@ -102,10 +118,11 @@ try {
   const savedCalls = baselineCalls - evaluatorCalls;
   const averageInputTokens = evaluatorCalls > 0 ? usage.inputTokens / evaluatorCalls : 0;
   const averageOutputTokens = evaluatorCalls > 0 ? usage.outputTokens / evaluatorCalls : 0;
-  console.log(JSON.stringify({
+  const report = {
     benchmark: 'JBrancher live Pi preference-learning benchmark',
     model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
+    thresholds: { minimumProbability, minimumMargin },
     caveat: 'Live TypeSafe Pi-router measurement with deterministic route verifiers; not an official SWE-bench patch-resolution score.',
     baselineJevCalls: baselineCalls,
     actualJevCalls: evaluatorCalls,
@@ -118,7 +135,13 @@ try {
     },
     routeCoverage: rows.every(row => row.routeCoverage),
     rows
-  }, null, 2));
+  };
+  if (process.argv.includes('--assert')) {
+    assert.ok(report.actualJevCalls < report.baselineJevCalls);
+    assert.equal(report.routeCoverage, true);
+    assert.ok(rows.every(row => row.attempts.every(attempt => attempt.correct)));
+  }
+  console.log(JSON.stringify(report, null, 2));
 } finally {
   await rm(directory, { recursive: true, force: true });
 }

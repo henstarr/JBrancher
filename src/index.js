@@ -16,13 +16,15 @@ function sameAction(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function choose(scores, candidates, minimumProbability, minimumMargin) {
+function choose(scores, candidates, minimumProbability, minimumMargin, noMatchScore = 0) {
   if (!Array.isArray(scores) || scores.length !== candidates.length || scores.length === 0) return null;
   if (scores.some(score => typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 1)) return null;
-  const ranked = scores.map((score, index) => ({ score, index })).sort((a, b) => b.score - a.score);
+  if (typeof noMatchScore !== 'number' || !Number.isFinite(noMatchScore) || noMatchScore < 0 || noMatchScore > 1) return null;
+  const ranked = [...scores.map((score, index) => ({ score, index })), { score: noMatchScore, index: -1 }]
+    .sort((a, b) => b.score - a.score);
   const best = ranked[0];
   const second = ranked[1]?.score ?? 0;
-  if (best.score < minimumProbability || best.score - second < minimumMargin) return null;
+  if (best.index === -1 || best.score < minimumProbability || best.score - second < minimumMargin) return null;
   return { action: clone(candidates[best.index]), score: best.score, index: best.index, scores: [...scores] };
 }
 
@@ -142,8 +144,15 @@ export function createJBrancher({
     if (evaluate && candidates.length > 0) {
       try {
         const verdict = await evaluate({ state: clone(state), task, history: clone(history), candidates: clone(candidates), signal });
-        evaluation = { scores: clone(verdict?.scores ?? []), usage: clone(verdict?.usage ?? []) };
-        const selected = choose(verdict?.scores, candidates, minimumProbability, minimumMargin);
+        evaluation = {
+          scores: clone(verdict?.scores ?? []),
+          ...(typeof verdict?.noMatchScore === 'number' ? { noMatchScore: verdict.noMatchScore } : {}),
+          ...(typeof verdict?.confidence === 'number' ? { confidence: verdict.confidence } : {}),
+          ...(verdict?.selected === null || Number.isSafeInteger(verdict?.selected)
+            ? { selected: verdict.selected } : {}),
+          usage: clone(verdict?.usage ?? [])
+        };
+        const selected = choose(verdict?.scores, candidates, minimumProbability, minimumMargin, verdict?.noMatchScore ?? 0);
         if (selected) {
           return { source: 'jev', action: selected.action, routeResolution: 'registered', score: selected.score,
             scores: selected.scores, selected: selected.index, candidates, evaluation, usage: clone(verdict?.usage ?? []) };

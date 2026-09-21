@@ -48,6 +48,9 @@
   against the live dataset source.
 - Record a three-task live Pi preference-learning benchmark with verified
   50% Jev-call reduction and complete local-route coverage.
+- Use TypeSafe Choice with an explicit no-match branch for route selection by
+  default, preserve the legacy Noul evaluator as an opt-in compatibility mode,
+  and add an asserted 14-task live calibration benchmark.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.

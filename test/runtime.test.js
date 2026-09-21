@@ -30,6 +30,19 @@ test('Jev selects only a supplied candidate when probability and margin pass', a
   assert.deepEqual(result.action, { tool: 'write', args: { value: 8 } });
 });
 
+test('Choice evaluators can explicitly select no-match over an executable candidate', async () => {
+  const brancher = createJBrancher({
+    getCandidates: async () => [{ tool: 'write', args: { value: 8 } }],
+    evaluate: async () => ({ scores: [0.74], noMatchScore: 0.81, confidence: 0.64 }),
+    actor: async () => ({ action: { tool: 'frontier', args: { reason: 'needs more context' } } })
+  });
+  const result = await brancher.decide({ task: 'unknown', state: {} });
+  assert.equal(result.source, 'actor');
+  assert.deepEqual(result.action, { tool: 'frontier', args: { reason: 'needs more context' } });
+  assert.equal(result.evaluation.noMatchScore, 0.81);
+  assert.equal(result.evaluation.confidence, 0.64);
+});
+
 test('uncertain evaluation falls back to the actor', async () => {
   const brancher = createJBrancher({
     getCandidates: async () => [{ tool: 'write', args: {} }, { tool: 'verify', args: {} }],

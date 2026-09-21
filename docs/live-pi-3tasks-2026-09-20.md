@@ -1,22 +1,22 @@
 # Live Pi preference-learning benchmark: three-task sample — 2026-09-20
 
-This bounded run used the live TypeSafe `jev-1.13.0` evaluator through the Pi
-router on three SWE-bench Lite problem statements, four repetitions per task,
-two competing route choices, and deterministic route verification. The API key
-was loaded from the ignored local `.env` file and is not present here.
+This bounded run used the live TypeSafe `jev-1.13.0` Choice evaluator through
+the Pi router on three SWE-bench Lite problem statements, four repetitions per
+task, two competing route choices, and deterministic route verification. The
+API key was loaded from the ignored local `.env` file and is not present here.
 
 | Metric | Result |
 | --- | ---: |
 | Baseline Jev calls | 12 |
 | Actual Jev calls | 6 |
 | Jev calls avoided | 6 (50%) |
-| Observed Jev input tokens | 3,746 |
-| Observed Jev output tokens | 240 |
-| Estimated avoided input tokens at observed average | 3,746 |
-| Estimated avoided output tokens at observed average | 240 |
+| Observed Jev input tokens | 3,908 |
+| Observed Jev output tokens | 276 |
+| Estimated avoided input tokens at observed average | 3,908 |
+| Estimated avoided output tokens at observed average | 276 |
 | Verified learned-route coverage | 100% |
 
-Each task used Jev for two warm-up decisions. After the second verified
+Each task used Jev for two warm-up choices. After the second verified
 success, the project-local preference handled the remaining two attempts with
 no provider usage. The local route preserved the deterministic verifier result
 for every attempt.
