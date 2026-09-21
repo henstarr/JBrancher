@@ -75,7 +75,8 @@ is the same operation exposed by `jbrancher dataset --input ...` and does not
 use an external database. The benchmark then imports that portable export into a
 fresh local store, applies the normal read-only promotion threshold, and verifies
 that all 14 SWE-bench-derived workflows become local active routes without
-importing verification claims.
+importing verification claims. A second import is also run and must skip all 56
+existing observations, proving the local import is idempotent.
 
 The paired cost fixture uses the same task set, actor, and completion oracle for
 actor-only, rules-only, and JBrancher arms. It reports task success, actor and

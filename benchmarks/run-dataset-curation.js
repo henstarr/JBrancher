@@ -52,6 +52,10 @@ try {
     reviewed: true,
     source: 'shared-swebench-derived-dataset'
   });
+  const repeatedImport = await importDatasetExamples(importedStore, portableMerged, {
+    reviewed: true,
+    source: 'shared-swebench-derived-dataset'
+  });
   const importedLearning = await refreshAndPromoteReadOnly(importedStore, { minimumObservations: 2 });
   const importedRoutes = await importedStore.readRoutes();
   const warmStartMatches = instances.filter(instance => {
@@ -76,6 +80,10 @@ try {
     portableMergeNoExternalDatabase: true,
     importedTraces: imported.importedTraces,
     importedObservations: imported.importedObservations,
+    repeatedImportTraces: repeatedImport.importedTraces,
+    repeatedImportSkippedTraces: repeatedImport.skippedExistingTraces,
+    importIdempotent: repeatedImport.importedTraces === 0
+      && repeatedImport.skippedExistingTraces === imported.importedTraces,
     importedActiveReadOnlyRoutes: importedRoutes.filter(route => route.status === 'active' && route.safety === 'read-only').length,
     importedPromotedRoutes: importedLearning.promoted.length,
     portableImportNoExternalDatabase: true,
@@ -98,6 +106,9 @@ try {
     assert.equal(report.portableMergeNoExternalDatabase, true);
     assert.equal(report.importedTraces, report.rawExamples);
     assert.equal(report.importedObservations, report.rawExamples);
+    assert.equal(report.repeatedImportTraces, 0);
+    assert.equal(report.repeatedImportSkippedTraces, report.importedTraces);
+    assert.equal(report.importIdempotent, true);
     assert.equal(report.importedActiveReadOnlyRoutes, report.curatedExamples);
     assert.equal(report.importedPromotedRoutes, report.curatedExamples);
     assert.equal(report.portableImportNoExternalDatabase, true);

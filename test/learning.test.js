@@ -503,6 +503,12 @@ test('reviewed dataset imports become local evidence without importing verificat
     assert.equal(imported.importedTraces, 2);
     assert.equal(imported.importedObservations, 2);
     assert.equal(imported.unsafeExamples, 0);
+    const repeated = await importDatasetExamples(store, [curated], {
+      reviewed: true,
+      source: 'shared-dataset'
+    });
+    assert.equal(repeated.importedTraces, 0);
+    assert.equal(repeated.skippedExistingTraces, 2);
     const traces = await store.readTraces();
     assert.equal(traces.length, 2);
     assert.equal(traces.every(trace => trace.metadata.postconditionValidated === undefined), true);

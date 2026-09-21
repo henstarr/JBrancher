@@ -860,6 +860,9 @@ export async function importDatasetExamples(store, examples, {
   let importedObservations = 0;
   let cappedExamples = 0;
   let unsafeExamples = 0;
+  let skippedExistingTraces = 0;
+  let skippedExistingObservations = 0;
+  const pendingTraces = [];
   for (const [index, rawExample] of examples.entries()) {
     const example = validateImportedDatasetExample(rawExample, index);
     const observations = importedObservationCount(example, maxObservationsPerExample);
@@ -867,7 +870,7 @@ export async function importDatasetExamples(store, examples, {
     const safety = classifyTraceSafety(example.steps);
     if (safety !== 'read-only') unsafeExamples++;
     for (let observation = 0; observation < observations; observation++) {
-      await store.appendTrace({
+      const trace = {
         id: `import-${hash(`${source}\n${example.fingerprint}\n${observation}`)}`,
         task: example.task,
         source,
@@ -880,15 +883,42 @@ export async function importDatasetExamples(store, examples, {
           importedFrom: source,
           importedContext: example.context || {}
         }
-      });
-      importedTraces++;
-      importedObservations++;
+      };
+      pendingTraces.push(trace);
+    }
+  }
+  if (typeof store.appendTracesIfNew === 'function') {
+    const result = await store.appendTracesIfNew(pendingTraces);
+    importedTraces = result.appended;
+    importedObservations = result.appended;
+    skippedExistingTraces = result.skipped;
+    skippedExistingObservations = result.skipped;
+  } else {
+    const existingIds = new Set(typeof store.readTraces === 'function'
+      ? (await store.readTraces()).map(trace => trace?.id).filter(Boolean)
+      : []);
+    for (const trace of pendingTraces) {
+      const result = typeof store.appendTraceIfNew === 'function'
+        ? await store.appendTraceIfNew(trace)
+        : existingIds.has(trace.id)
+          ? { appended: false }
+          : { appended: true, record: await store.appendTrace(trace) };
+      if (result?.appended === false) {
+        skippedExistingTraces++;
+        skippedExistingObservations++;
+      } else {
+        existingIds.add(trace.id);
+        importedTraces++;
+        importedObservations++;
+      }
     }
   }
   return {
     examples: examples.length,
     importedTraces,
     importedObservations,
+    skippedExistingTraces,
+    skippedExistingObservations,
     cappedExamples,
     unsafeExamples,
     source,
@@ -1171,6 +1201,42 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     });
   }
 
+  async function appendTraceIfNew(trace) {
+    return withLock(async () => {
+      await ensure();
+      const record = normalizeTrace(trace);
+      const existing = (await readTraces()).find(item => item?.id === record.id);
+      if (existing) return { appended: false, record: existing };
+      await appendFile(tracesPath, `${JSON.stringify(record)}\n`, 'utf8');
+      await appendDatasetExampleUnlocked(record);
+      return { appended: true, record };
+    });
+  }
+
+  async function appendTracesIfNew(traces) {
+    if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
+    return withLock(async () => {
+      await ensure();
+      const existingIds = new Set((await readTraces()).map(item => item?.id).filter(Boolean));
+      const records = [];
+      let skipped = 0;
+      for (const trace of traces) {
+        const record = normalizeTrace(trace);
+        if (existingIds.has(record.id)) {
+          skipped++;
+          continue;
+        }
+        existingIds.add(record.id);
+        records.push(record);
+      }
+      if (records.length > 0) {
+        await appendFile(tracesPath, `${records.map(record => JSON.stringify(record)).join('\n')}\n`, 'utf8');
+        await appendFile(datasetPath, `${records.map(record => JSON.stringify(traceToDatasetExample(record))).join('\n')}\n`, 'utf8');
+      }
+      return { appended: records.length, skipped, records };
+    });
+  }
+
   async function readTraces() {
     try {
       const contents = await readTextFile(tracesPath, 'utf8');
@@ -1396,7 +1462,7 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
 
   return {
     directory, tracesPath, routesPath, datasetPath, curatedDatasetPath, preferencesPath,
-    appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes,
+    appendTrace, appendTraceIfNew, appendTracesIfNew, appendDatasetExample, readTraces, readRoutes, writeRoutes,
     writeDataset, refreshCandidates, promote, recordRouteFailure, recordRouteSuccess,
     readPreferences, writePreferences, findPreference, recordPreferenceSuccess,
     recordPreferenceFailure

@@ -517,7 +517,8 @@ npx jbrancher learn \
 JBrancher recomputes fingerprints, caps aggregate evidence, and does not trust
 verification claims from the imported file. Safe read-only routes still need the
 normal observation threshold; writes remain inactive until the destination
-harness verifies their postconditions.
+harness verifies their postconditions. Imports are idempotent, so repeating the
+same reviewed export does not inflate evidence or route confidence.
 
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
 

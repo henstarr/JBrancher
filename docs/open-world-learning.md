@@ -110,7 +110,9 @@ row, caps unusually large aggregate counts, and keeps imported verification
 claims out of the trusted metadata. The normal promotion policy then applies:
 read-only routes may activate after the configured evidence threshold, while
 writes and other side effects remain inactive unless newly verified by the
-target harness.
+target harness. Imports are idempotent: stable observation IDs are skipped on a
+repeat import, so restarting a worker or rerunning a reviewed export does not
+artificially inflate route evidence.
 
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
