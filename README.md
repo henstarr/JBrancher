@@ -656,6 +656,8 @@ not run the official SWE-bench grader or print credentials.
 
 The latest one-task live verification is recorded in
 [docs/live-learning-1task-2026-09-20.md](docs/live-learning-1task-2026-09-20.md).
+The latest three-task Pi preference-learning run is recorded in
+[docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
 
 To benchmark the language-agnostic open-world bridge, run:
 

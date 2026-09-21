@@ -46,6 +46,8 @@
   future local route mining can distinguish why an action was selected.
 - Add a dedicated CI provenance job that checks the SWE-bench Lite fixture
   against the live dataset source.
+- Record a three-task live Pi preference-learning benchmark with verified
+  50% Jev-call reduction and complete local-route coverage.
 - Add a native Pi package/extension with deterministic-first input routing,
   project-local routes, optional Jev disambiguation, safe read-only built-ins,
   shadow mode, and frontier fallback on uncertainty or failure.
