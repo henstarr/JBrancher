@@ -722,6 +722,91 @@ test('decision service ingests open-world episodes into the local learning datas
   }
 });
 
+test('decision service selects the stronger authorized learned workflow', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-proxy-selection-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    await store.writeRoutes([
+      {
+        id: 'strong-workflow',
+        status: 'active',
+        safety: 'read-only',
+        matcher: { type: 'normalized-exact', value: 'inspect the issue' },
+        observations: 4,
+        action: { actions: [
+          { toolName: 'read', input: { path: 'issue.md' } },
+          { toolName: 'read', input: { path: 'test_issue.md' } }
+        ] }
+      },
+      {
+        id: 'weak-workflow',
+        status: 'active',
+        safety: 'read-only',
+        matcher: { type: 'normalized-exact', value: 'inspect the issue' },
+        observations: 1,
+        action: { actions: [
+          { toolName: 'read', input: { path: 'README.md' } },
+          { toolName: 'read', input: { path: 'CHANGELOG.md' } }
+        ] }
+      }
+    ]);
+    const service = createJBrancherServer({ learningDirectory: directory });
+    const address = await service.listen({ port: 0 });
+    try {
+      const baseUrl = `http://${address.host}:${address.port}`;
+      const response = await fetch(`${baseUrl}/v1/workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'inspect the issue',
+          candidateSteps: [
+            [
+              { tool: 'read', args: { path: 'issue.md' } },
+              { tool: 'read', args: { path: 'README.md' } }
+            ],
+            [
+              { tool: 'read', args: { path: 'test_issue.md' } },
+              { tool: 'read', args: { path: 'CHANGELOG.md' } }
+            ]
+          ]
+        })
+      }).then(result => result.json());
+      assert.equal(response.source, 'learned');
+      assert.equal(response.routeId, 'strong-workflow');
+      assert.deepEqual(response.actions, [
+        { tool: 'read', args: { path: 'issue.md' } },
+        { tool: 'read', args: { path: 'test_issue.md' } }
+      ]);
+
+      const routes = await store.readRoutes();
+      await store.writeRoutes(routes.map(route => ({ ...route, observations: 2 })));
+      const tied = await fetch(`${baseUrl}/v1/workflow`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          task: 'inspect the issue',
+          candidateSteps: [
+            [
+              { tool: 'read', args: { path: 'issue.md' } },
+              { tool: 'read', args: { path: 'README.md' } }
+            ],
+            [
+              { tool: 'read', args: { path: 'test_issue.md' } },
+              { tool: 'read', args: { path: 'CHANGELOG.md' } }
+            ]
+          ]
+        })
+      }).then(result => result.json());
+      assert.equal(tied.source, 'abstain');
+      assert.equal(tied.routeResolution, 'ambiguous');
+    } finally {
+      await service.close();
+    }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('decision service requires explicit postcondition verification for learned writes', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-proxy-verified-'));
   let evaluatorCalls = 0;

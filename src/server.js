@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { createJBrancher, sameAction } from './index.js';
 import { createJevEvaluator } from './jev.js';
 import { createOpenWorldLearner } from './discovery.js';
-import { findLearnedWorkflows } from './learning.js';
+import { findLearnedWorkflows, selectLearnedWorkflow } from './learning.js';
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -196,15 +196,17 @@ export function createJBrancherServer({
         }
         const maxSteps = Number.isSafeInteger(input.maxSteps) && input.maxSteps > 0 ? input.maxSteps : 12;
         if (maxSteps > 100) return sendJson(response, 400, { error: 'maxSteps must be <= 100' });
-        const workflows = await findLearnedWorkflows(await learner.store.readRoutes(), input.task, {
+        const workflowRecords = await learner.store.readRoutes();
+        const workflows = findLearnedWorkflows(workflowRecords, input.task, {
           allowVerified: learningAllowVerified
         });
         const matches = workflows.filter(workflow => workflow.actions.length <= maxSteps
           && workflow.actions.every((action, index) => input.candidateSteps[index]
             .some(candidate => sameAction(candidate, action))));
+        const selected = selectLearnedWorkflow(matches, workflowRecords);
         stats.requestsTotal += 1;
         stats.workflowRequests += 1;
-        if (matches.length !== 1) {
+        if (!selected) {
           return sendJson(response, 200, {
             source: 'abstain',
             action: null,
@@ -216,8 +218,8 @@ export function createJBrancherServer({
         }
         return sendJson(response, 200, {
           source: 'learned',
-          routeId: matches[0].id,
-          actions: matches[0].actions,
+          routeId: selected.id,
+          actions: selected.actions,
           routeResolution: 'learned',
           usage: [],
           reason: 'A proven local workflow matched'
