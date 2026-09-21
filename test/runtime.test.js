@@ -155,6 +155,34 @@ test('generic brancher records unknown actor fallback episodes in a local store'
   }
 });
 
+test('generic runtime records bounded decision usage in the local episode dataset', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-usage-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const brancher = createJBrancher({
+      getCandidates: async () => [],
+      actor: async () => ({
+        action: { tool: 'read', args: { path: 'README.md' } },
+        usage: [{ provider: 'frontier', input_tokens: 123, output_tokens: 7, apiKey: 'apikey_should_not_persist_1234567890' }]
+      }),
+      execute: async () => 'ok',
+      learningStore: store
+    });
+
+    await brancher.step({ task: 'Read README.md', state: {} });
+    const [trace] = await store.readTraces();
+    assert.deepEqual(trace.toolCalls[0].context.selection.usage, [{
+      provider: 'frontier', input_tokens: 123, output_tokens: 7, apiKey: '[REDACTED]'
+    }]);
+    const [example] = (await store.writeDataset()).examples;
+    assert.deepEqual(example.steps[0].context.selection.usage, [{
+      provider: 'frontier', input_tokens: 123, output_tokens: 7, apiKey: '[REDACTED]'
+    }]);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic runtime learns an open-world route before replaying it when authorized', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-open-world-'));
   try {

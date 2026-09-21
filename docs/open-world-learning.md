@@ -80,7 +80,10 @@ is an explicit, opt-in step outside JBrancher's runtime.
 
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
-by the learning store.
+by the learning store. Generic runtime decisions also retain bounded usage
+metadata (such as numeric input/output token counts) inside the step context,
+so a local benchmark can measure the cost of the frontier or Jev decision that
+created a route. Secret fields remain redacted.
 There is no external database requirement.
 
 Preference learning is context-scoped. When the Pi adapter learns that Jev
@@ -108,7 +111,9 @@ benchmark report. The snapshot also includes a compact `replay` summary and
 per-route `replayTelemetry`: replay attempts, success rate, failures,
 quarantine state, and estimated frontier steps avoided. This lets a local
 harness measure whether a promoted shortcut is actually earning reuse rather
-than merely accumulating observations.
+than merely accumulating observations. When the harness supplies numeric
+decision usage, the snapshot also reports observed input, output, and total
+tokens for the recorded frontier/Jev decisions.
 
 No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the

@@ -5,6 +5,54 @@ import {
   refreshAndPromoteReadOnly
 } from './learning.js';
 
+const usageKeys = {
+  input: ['input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokens'],
+  output: ['output_tokens', 'outputTokens', 'completion_tokens', 'completionTokens'],
+  total: ['total_tokens', 'totalTokens']
+};
+
+function usageValue(row, keys) {
+  for (const key of keys) {
+    if (typeof row?.[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0) return row[key];
+  }
+  return null;
+}
+
+function summarizeUsage(traces) {
+  const rows = traces.flatMap(trace => trace.toolCalls?.flatMap(call => {
+    const usage = call?.context?.selection?.usage;
+    if (Array.isArray(usage)) return usage;
+    return usage && typeof usage === 'object' ? [usage] : [];
+  }) || []);
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let observedInputRows = 0;
+  let observedOutputRows = 0;
+  for (const row of rows) {
+    const input = usageValue(row, usageKeys.input);
+    const output = usageValue(row, usageKeys.output);
+    const total = usageValue(row, usageKeys.total);
+    if (input !== null) {
+      inputTokens += input;
+      observedInputRows++;
+    }
+    if (output !== null) {
+      outputTokens += output;
+      observedOutputRows++;
+    }
+    totalTokens += total ?? ((input ?? 0) + (output ?? 0));
+  }
+  return {
+    usageRows: rows.length,
+    observedInputRows,
+    observedOutputRows,
+    inputTokens,
+    outputTokens,
+    totalTokens
+  };
+}
+
 /**
  * Create the harness-neutral open-world learning boundary.
  *
@@ -226,7 +274,8 @@ export function createOpenWorldLearner({
         estimatedFrontierStepsAvoided: replayTelemetry.reduce((total, route) => total + route.estimatedFrontierStepsAvoided, 0)
       },
       outcomes,
-      resolutions
+      resolutions,
+      usage: summarizeUsage(traces)
     };
   }
 

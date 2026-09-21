@@ -95,6 +95,35 @@ test('open-world learner keeps no-tool frontier work as demand evidence', async 
   }
 });
 
+test('open-world snapshot totals recorded frontier usage without retaining secrets', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-usage-'));
+  try {
+    const learner = createOpenWorldLearner({ directory });
+    const episode = learner.begin({ task: 'inspect package.json', routeResolution: 'unmatched' });
+    episode.recordToolCall({
+      toolCallId: 'usage-1',
+      toolName: 'read',
+      input: { path: 'package.json' },
+      context: { selection: { usage: [{ inputTokens: 123, outputTokens: 7, apiKey: 'apikey_should_not_persist_1234567890' }] } }
+    });
+    episode.recordToolResult({ toolCallId: 'usage-1', isError: false, output: 'ok' });
+    await episode.finish({ outcome: 'success' });
+    const snapshot = await learner.snapshot();
+    assert.deepEqual(snapshot.usage, {
+      usageRows: 1,
+      observedInputRows: 1,
+      observedOutputRows: 1,
+      inputTokens: 123,
+      outputTokens: 7,
+      totalTokens: 130
+    });
+    const [trace] = await learner.store.readTraces();
+    assert.equal(trace.toolCalls[0].context.selection.usage[0].apiKey, '[REDACTED]');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('open-world learner ingests a completed frontier trajectory in one call', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-ingest-'));
   try {

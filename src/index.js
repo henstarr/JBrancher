@@ -16,6 +16,12 @@ function sameAction(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+function boundedUsage(value) {
+  if (Array.isArray(value)) return value.slice(0, 20).map(item => clone(item));
+  if (value && typeof value === 'object') return clone(value);
+  return [];
+}
+
 function choose(scores, candidates, minimumProbability, minimumMargin, noMatchScore = 0) {
   if (!Array.isArray(scores) || scores.length !== candidates.length || scores.length === 0) return null;
   if (scores.some(score => typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 1)) return null;
@@ -196,7 +202,8 @@ export function createJBrancher({
           candidates,
           ...(Number.isSafeInteger(decision.selected) ? { selected: decision.selected } : {}),
           ...(typeof decision.score === 'number' ? { score: decision.score } : {}),
-          ...(Array.isArray(decision.scores) ? { scores: decision.scores.slice(0, 20) } : {})
+          ...(Array.isArray(decision.scores) ? { scores: decision.scores.slice(0, 20) } : {}),
+          ...(decision.usage !== undefined ? { usage: boundedUsage(decision.usage) } : {})
         }
       }
     });

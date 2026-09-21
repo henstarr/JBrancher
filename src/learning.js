@@ -2,8 +2,9 @@ import { join } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { appendFile, mkdir, open, readFile as readTextFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 
-const SECRET_KEY = /(api[_-]?key|token|password|secret|authorization|cookie)/i;
+const SECRET_KEY = /(api[_-]?key|token|password|secret|authorization|cookie|private[_-]?key)/i;
 const SECRET_VALUE = /(Bearer\s+)[A-Za-z0-9._~+/=-]+|(?:sk|key|apikey)[_-][A-Za-z0-9_-]{16,}/gi;
+const USAGE_COUNT_KEY = /^(?:input|output|total|prompt|completion|cached|reasoning)[_-]?tokens?$/i;
 const ROUTE_STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'can', 'do', 'for', 'from', 'how', 'i', 'in', 'is',
   'it', 'me', 'my', 'of', 'on', 'or', 'please', 'tell', 'that', 'the', 'this',
@@ -31,7 +32,8 @@ export function redactValue(value, depth = 0, maxDepth = 5) {
   if (Array.isArray(value)) return value.slice(0, 50).map(item => redactValue(item, depth + 1, maxDepth));
   if (!value || typeof value !== 'object') return value;
   return Object.fromEntries(Object.entries(value).slice(0, 100).map(([key, item]) => [
-    key, SECRET_KEY.test(key) ? '[REDACTED]' : redactValue(item, depth + 1, maxDepth)
+    key, (SECRET_KEY.test(key) && !(USAGE_COUNT_KEY.test(key) && typeof item === 'number'))
+      ? '[REDACTED]' : redactValue(item, depth + 1, maxDepth)
   ]));
 }
 

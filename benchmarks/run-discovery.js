@@ -74,6 +74,7 @@ try {
     avoidedFrontierCalls: avoidedCalls,
     frontierCallReduction: baselineCalls ? avoidedCalls / baselineCalls : 0,
     syntheticProviderTokens: { baseline: baselineTokens, actual: actualTokens, saved: baselineTokens - actualTokens },
+    observedUsage: snapshot.usage,
     learnedReplays: learnedRows,
     activeRoutes: routes.filter(route => route.status === 'active').length,
     successfulReplays: snapshot.successfulReplays,
@@ -89,6 +90,9 @@ try {
     assert.ok(report.successfulReplays >= report.learnedReplays);
     assert.equal(report.outcomes.success, report.actualFrontierCalls);
     assert.ok(report.frontierCallReduction >= 1 / 3);
+    assert.equal(report.observedUsage.inputTokens, report.actualFrontierCalls * actorInputTokens);
+    assert.equal(report.observedUsage.outputTokens, report.actualFrontierCalls * actorOutputTokens);
+    assert.equal(report.observedUsage.totalTokens, report.actualFrontierCalls * (actorInputTokens + actorOutputTokens));
   }
   console.log(JSON.stringify(report, null, 2));
 } finally {
