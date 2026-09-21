@@ -15,6 +15,8 @@
   through dynamic authorization without enumerating candidates.
 - Add a `learningDirectory` shortcut so generic harnesses can opt into the local
   learning store without constructing one manually.
+- Add separate teaching/replay phases to the live Codex template benchmark so
+  local learned routes can be measured across process restarts.
 
 ## 0.1.0 - 2026-09-17
 

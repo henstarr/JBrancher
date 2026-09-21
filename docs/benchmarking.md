@@ -329,6 +329,28 @@ To measure live frontier usage for the parameterized action-template learner:
 npm run bench:live-codex-template -- --values 3 --assert
 ```
 
+To prove that the live route survives a harness restart, use a persistent local
+directory and run the two phases as separate processes:
+
+```sh
+npm run bench:live-codex-template -- \
+  --values 4 --authorization-only --phase teach \
+  --learning-dir .jbrancher/live-codex-template --assert
+npm run bench:live-codex-template -- \
+  --values 4 --authorization-only --phase replay \
+  --learning-dir .jbrancher/live-codex-template --assert
+```
+
+The teaching process makes the bounded Codex calls and writes local traces,
+dataset rows, and the verified action-template route. The replay process then
+uses the same local directory, omits Codex entirely for the novel values, and
+reports `novelFrontierCalls: 0`. This is the closest live measurement of the
+drop-in restart behavior; compare the teaching provider usage with the replay
+usage rather than treating the phases as one combined token sample.
+
+The checked-in four-value run is recorded in
+[docs/live-codex-persistence-2026-09-21.md](live-codex-persistence-2026-09-21.md).
+
 This is an experimental opt-in run. It requires the local Codex CLI and is not
 part of CI because it consumes provider quota.
 

@@ -896,6 +896,8 @@ The latest four-value live template run is recorded in
 [docs/live-codex-template-4values-2026-09-20.md](docs/live-codex-template-4values-2026-09-20.md).
 The latest live Codex authorization-only run is recorded in
 [docs/live-codex-authorization-2026-09-21.md](docs/live-codex-authorization-2026-09-21.md).
+The latest cross-process live Codex persistence run is recorded in
+[docs/live-codex-persistence-2026-09-21.md](docs/live-codex-persistence-2026-09-21.md).
 The latest three-task live-Codex run is recorded in
 [docs/live-codex-3tasks-2026-09-21.md](docs/live-codex-3tasks-2026-09-21.md).
 The latest seven-task live-Codex run is recorded in
@@ -967,6 +969,18 @@ For the same boundary with real Codex usage, run:
 
 ```sh
 npm run bench:live-codex-template -- --values 4 --authorization-only --assert
+```
+
+To verify live learning across a harness restart, persist the local directory
+and run teaching and replay as separate processes:
+
+```sh
+npm run bench:live-codex-template -- \
+  --values 4 --authorization-only --phase teach \
+  --learning-dir .jbrancher/live-codex-template --assert
+npm run bench:live-codex-template -- \
+  --values 4 --authorization-only --phase replay \
+  --learning-dir .jbrancher/live-codex-template --assert
 ```
 
 This omits `getCandidates`, uses the harness authorization callback, and

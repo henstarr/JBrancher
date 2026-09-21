@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { createJBrancher } from '../src/index.js';
@@ -92,31 +92,42 @@ function expectedAction(value) {
   return { tool: 'lookup', args: { query: value, scope: 'docs' } };
 }
 
+function flagValue(name, fallback) {
+  const index = process.argv.indexOf(name);
+  return index === -1 ? fallback : process.argv[index + 1];
+}
+
 const valueCount = numericFlag('--values', 4, { min: 3, max: 6 });
 const shouldAssert = process.argv.includes('--assert');
 const authorizationOnly = process.argv.includes('--authorization-only');
+const phase = flagValue('--phase', 'all');
+const learningDirectoryArg = flagValue('--learning-dir');
+if (!['all', 'teach', 'replay'].includes(phase)) throw new Error('--phase must be all, teach, or replay');
+if (phase !== 'all' && !learningDirectoryArg) throw new Error('--learning-dir is required for --phase teach or --phase replay');
 const values = ['authentication', 'billing', 'payments', 'reliability', 'security', 'performance'].slice(0, valueCount);
 const executable = process.env.JBRANCHER_CODEX_EXECUTABLE
   || (process.platform === 'win32' ? 'codex.exe' : 'codex');
 const root = await mkdtemp(join(tmpdir(), 'jbrancher-live-codex-template-'));
+const learningDirectory = learningDirectoryArg ? resolve(learningDirectoryArg) : join(root, 'learning');
 
 try {
   const baselineUsageRows = [];
   const baselineRows = [];
-  for (const value of values) {
-    const task = `lookup ${value} in docs`;
-    const started = performance.now();
-    const result = await askCodex({ task, cwd: root, executable });
-    baselineUsageRows.push(result.usage);
-    baselineRows.push({
-      value,
-      correct: JSON.stringify(result.action) === JSON.stringify(expectedAction(value)),
-      elapsedMs: Number((performance.now() - started).toFixed(1)),
-      usage: result.usage
-    });
+  if (phase === 'all') {
+    for (const value of values) {
+      const task = `lookup ${value} in docs`;
+      const started = performance.now();
+      const result = await askCodex({ task, cwd: root, executable });
+      baselineUsageRows.push(result.usage);
+      baselineRows.push({
+        value,
+        correct: JSON.stringify(result.action) === JSON.stringify(expectedAction(value)),
+        elapsedMs: Number((performance.now() - started).toFixed(1)),
+        usage: result.usage
+      });
+    }
   }
 
-  const store = createLocalLearningStore({ directory: join(root, 'learning') });
   const learnedUsageRows = [];
   const learnedRows = [];
   const teachingRows = [];
@@ -147,9 +158,9 @@ try {
         correct: JSON.stringify(action) === JSON.stringify(expected),
         output: `lookup results for ${value}`
       }),
-      learningStore: store,
+      learningDirectory,
       learningSource: 'live-codex-template-learning',
-      learningCwd: root,
+      learningCwd: process.cwd(),
       learningPromotionMode: 'verified',
       learningMinimumObservations: 2,
       learningOutcome: ({ event }) => event?.result?.correct === true
@@ -170,26 +181,31 @@ try {
   // A frontier actor can return a well-formed but wrong action. Treat that as
   // a failed teaching postcondition and retry a bounded number of times rather
   // than crashing the benchmark or allowing bad evidence into the route cache.
-  for (const [index, value] of teachingValues.entries()) {
-    let verified = false;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      const row = await runLearnedValue(value, index, 'teaching', attempt);
-      learnedRows.push(row);
-      teachingRows.push(row);
-      if (row.source === 'actor' && row.correct) {
-        verified = true;
-        break;
+  if (phase === 'all' || phase === 'teach') {
+    for (const [index, value] of teachingValues.entries()) {
+      let verified = false;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const row = await runLearnedValue(value, index, 'teaching', attempt);
+        learnedRows.push(row);
+        teachingRows.push(row);
+        if (row.source === 'actor' && row.correct) {
+          verified = true;
+          break;
+        }
       }
+      if (!verified) throw new Error(`Codex did not produce a verified teaching action for ${value}`);
     }
-    if (!verified) throw new Error(`Codex did not produce a verified teaching action for ${value}`);
   }
 
-  for (const [offset, value] of novelValues.entries()) {
-    const row = await runLearnedValue(value, offset + teachingValues.length, 'novel', 1);
-    learnedRows.push(row);
-    novelRows.push(row);
+  if (phase === 'all' || phase === 'replay') {
+    for (const [offset, value] of novelValues.entries()) {
+      const row = await runLearnedValue(value, offset + teachingValues.length, 'novel', 1);
+      learnedRows.push(row);
+      novelRows.push(row);
+    }
   }
 
+  const store = createLocalLearningStore({ directory: learningDirectory });
   const routes = await store.readRoutes();
   const templateRoutes = routes.filter(route => route.matcher?.type === 'action-template');
   const baselineUsage = sumUsage(baselineUsageRows);
@@ -197,10 +213,12 @@ try {
   const report = {
     benchmark: 'live-Codex-open-world-action-template-learning',
     actor: executable,
+    phase,
+    learningDirectory,
     authorizationOnly,
     capabilityCatalog: authorizationOnly ? 'omitted' : 'bounded-candidates',
     values,
-    baselineActorCalls: values.length,
+    baselineActorCalls: phase === 'all' ? values.length : 0,
     learnedActorCalls: actorCalls,
     actorCallsAvoided: values.length - actorCalls,
     actorCallReduction: Number(((values.length - actorCalls) / values.length).toFixed(3)),
@@ -211,8 +229,10 @@ try {
     verifiedTeachingEpisodes: teachingRows.filter(row => row.correct).length,
     novelFrontierCalls: novelRows.filter(row => row.source === 'actor').length,
     authorizationChecks: authorizationCalls,
-    providerTokensSaved: (baselineUsage.inputTokens + baselineUsage.outputTokens)
-      - (learnedUsage.inputTokens + learnedUsage.outputTokens),
+    providerTokensSaved: phase === 'all'
+      ? (baselineUsage.inputTokens + baselineUsage.outputTokens)
+        - (learnedUsage.inputTokens + learnedUsage.outputTokens)
+      : null,
     templateRoutes: templateRoutes.map(route => ({
       id: route.id,
       status: route.status,
@@ -233,16 +253,18 @@ try {
   if (shouldAssert) {
     // The live baseline is intentionally measured, not treated as an oracle.
     // The learning arm must collect two verified teaching episodes and then
-    // serve every novel value locally.
-    assert.equal(report.verifiedTeachingEpisodes, teachingValues.length);
+    // serve every novel value locally. In replay-only mode, those teaching
+    // episodes came from a prior process and the provider-saving comparison is
+    // intentionally reported by the paired runs rather than inferred here.
+    if (phase !== 'replay') assert.equal(report.verifiedTeachingEpisodes, teachingValues.length);
     assert.ok(report.learnedTaskSuccess);
     assert.equal(report.novelFrontierCalls, 0);
-    assert.ok(report.learnedRouteCoverage);
-    if (authorizationOnly) assert.ok(report.authorizationChecks > 0);
+    if (phase !== 'teach') assert.ok(report.learnedRouteCoverage);
+    if (authorizationOnly && phase !== 'teach') assert.ok(report.authorizationChecks > 0);
     assert.equal(templateRoutes.length, 1);
     assert.equal(templateRoutes[0].status, 'active');
     assert.equal(templateRoutes[0].verified, true);
-    assert.ok(report.providerTokensSaved > 0);
+    if (phase === 'all') assert.ok(report.providerTokensSaved > 0);
   }
   console.log(JSON.stringify(report, null, 2));
 } finally {
