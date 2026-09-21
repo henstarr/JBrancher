@@ -32,6 +32,7 @@ jobs:
       - run: npm run bench:learning -- --assert
       - run: npm run bench:discovery -- --assert
       - run: npm run bench:dataset -- --assert
+      - run: npm run bench:persistence -- --assert
       - run: npm run bench:proxy -- --assert
       - run: npm run bench:workflow -- --assert
       - run: npm run bench:harbor -- --assert

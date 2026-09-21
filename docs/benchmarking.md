@@ -26,6 +26,7 @@ npm run bench:workflow -- --assert
 npm run bench:harbor -- --assert
 npm run bench:adaptation -- --assert
 npm run bench:dataset -- --assert
+npm run bench:persistence -- --assert
 npm run bench:package -- --assert
 ```
 
@@ -33,6 +34,11 @@ npm run bench:package -- --assert
 temporary prefix, imports the public package entry point, and runs the installed
 CLI demo. It is the fastest check that a user can install JBrancher without
 depending on the repository checkout.
+
+`bench:persistence` runs three separate Node processes against one temporary
+local learning directory. It verifies that two successful frontier episodes
+survive process boundaries and that the third process replays the learned route
+without calling the frontier actor or an external database.
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
