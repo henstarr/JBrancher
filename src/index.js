@@ -38,13 +38,16 @@ function choose(scores, candidates, minimumProbability, minimumMargin, noMatchSc
  * Create a single decision boundary for a harness.
  *
  * Rules run first. A Jev-compatible evaluator may choose only from the
- * harness-supplied candidates. If rules and evaluation cannot settle the
- * step, the existing actor remains the fallback. The runtime never executes
- * an action unless the caller supplies an executor.
+ * harness-supplied candidates. Learned actions may additionally be authorized
+ * by `authorize` when a harness cannot enumerate its dynamic capabilities. If
+ * rules and evaluation cannot settle the step, the existing actor remains the
+ * fallback. The runtime never executes an action unless the caller supplies
+ * an executor.
  */
 export function createJBrancher({
   rules = [],
   getCandidates,
+  authorize,
   evaluate,
   actor,
   execute,
@@ -67,6 +70,7 @@ export function createJBrancher({
 } = {}) {
   if (!Array.isArray(rules) || rules.some(rule => typeof rule !== 'function')) throw new TypeError('rules must be functions');
   if (getCandidates !== undefined && typeof getCandidates !== 'function') throw new TypeError('getCandidates must be a function');
+  if (authorize !== undefined && typeof authorize !== 'function') throw new TypeError('authorize must be a function');
   if (evaluate !== undefined && typeof evaluate !== 'function') throw new TypeError('evaluate must be a function');
   if (actor !== undefined && typeof actor !== 'function') throw new TypeError('actor must be a function');
   if (execute !== undefined && typeof execute !== 'function') throw new TypeError('execute must be a function');
@@ -130,14 +134,38 @@ export function createJBrancher({
       });
     }
 
-    if (learningStore && getCandidates && typeof learningStore.readRoutes === 'function' && candidates.length > 0) {
+    if (learningStore && (getCandidates || authorize) && typeof learningStore.readRoutes === 'function') {
       try {
         const learned = findLearnedActions(await learningStore.readRoutes(), task, {
           allowVerified: learningPromotionMode === 'verified'
         })
-          .filter(match => candidates.some(candidate => sameAction(candidate, match.action)));
-        if (learned.length === 1) {
-          return { source: 'learned', action: clone(learned[0].action), routeId: learned[0].id,
+        const authorized = [];
+        for (const match of learned) {
+          // A supplied authorization callback is the authoritative capability
+          // check for harnesses whose tools are dynamic or too numerous to
+          // enumerate. Without it, preserve the original bounded-catalog
+          // requirement: the learned action must be in getCandidates().
+          if (!authorize && (candidates.length === 0
+            || !candidates.some(candidate => sameAction(candidate, match.action)))) continue;
+          if (authorize) {
+            let allowed = false;
+            try {
+              allowed = Boolean(await authorize({
+                action: clone(match.action),
+                state: clone(state),
+                task,
+                history: clone(history),
+                signal
+              }));
+            } catch {
+              allowed = false;
+            }
+            if (!allowed) continue;
+          }
+          authorized.push(match);
+        }
+        if (authorized.length === 1) {
+          return { source: 'learned', action: clone(authorized[0].action), routeId: authorized[0].id,
             routeResolution: 'learned',
             reason: 'A proven local route matched', usage: [] };
         }
@@ -356,7 +384,8 @@ export function createJBrancher({
   }
 
   async function replayLearnedWorkflow(input, initialState, initialHistory) {
-    if (!learningStore || !getCandidates || !execute || typeof learningStore.readRoutes !== 'function') return null;
+    if (!learningStore || (!getCandidates && !authorize) || !execute
+      || typeof learningStore.readRoutes !== 'function') return null;
     const task = String(input.task ?? '');
     let workflows;
     try {
@@ -374,13 +403,31 @@ export function createJBrancher({
     const events = [];
     for (let stepNumber = 0; stepNumber < workflows[0].actions.length; stepNumber++) {
       const action = workflows[0].actions[stepNumber];
-      let candidates;
-      try {
-        candidates = await getCandidates({ state: clone(state), task, history: clone(history), signal: input.signal });
-      } catch {
-        return null;
+      let candidates = [];
+      if (getCandidates) {
+        try {
+          candidates = await getCandidates({ state: clone(state), task, history: clone(history), signal: input.signal });
+        } catch {
+          return null;
+        }
+        if (!Array.isArray(candidates)) return null;
       }
-      if (!Array.isArray(candidates) || !candidates.some(candidate => sameAction(candidate, action))) return null;
+      if (!authorize && !candidates.some(candidate => sameAction(candidate, action))) return null;
+      if (authorize) {
+        let allowed = false;
+        try {
+          allowed = Boolean(await authorize({
+            action: clone(action),
+            state: clone(state),
+            task,
+            history: clone(history),
+            signal: input.signal
+          }));
+        } catch {
+          allowed = false;
+        }
+        if (!allowed) return null;
+      }
       const decision = { source: 'learned', action: clone(action), routeId: workflows[0].id,
         routeResolution: 'learned',
         reason: 'A proven local workflow matched', usage: [] };
@@ -492,6 +539,7 @@ export function createJBrancher({
 
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
+    authorization: Boolean(authorize),
     learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
     learningRecordEmptyEpisodes,
     learningMinimumObservations, learningCandidateMinimumObservations, learningPromotionMode,

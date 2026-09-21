@@ -420,8 +420,9 @@ const brancher = createJBrancher({
 
 This creates a closed-loop experiment: actor fallbacks produce redacted
 episodes, repeated successful read-only episodes are promoted locally, and a
-later run can use a learned action only when it is still present in the
-harness-provided candidate set. Keep learning enabled for both paired arms
+later run can use a learned action only when it is still authorized by the
+harness. Use the candidate set when the harness can enumerate capabilities;
+use the `authorize` callback when it cannot. Keep learning enabled for both paired arms
 only when you are measuring dataset growth; for a clean cost comparison,
 freeze or copy the learned `.jbrancher/routes.json` between trials so the
 controls do not receive different experience. Prefer supplying
@@ -431,12 +432,12 @@ tool success is not confused with task success.
 Keep `learningPromotionMode: 'safe'` for general-purpose agents. A harness
 may use `learningPromotionMode: 'verified'` to learn side-effecting actions,
 but only when its postcondition verifier returns success and its current
-candidate set still authorizes the replay. Treat this as a harness policy
+candidate set or `authorize` callback still authorizes the replay. Treat this as a harness policy
 decision, not as a Jev confidence decision.
 
 When the goal is to reduce Jev requests as well as actor requests, opt into
 recording successful Jev decisions with `learningOnlyFallback: false`. The
-local store still requires repeated evidence and the same candidate authorization
+local store still requires repeated evidence and the same harness authorization
 before replay. Keep the default `true` when you want learning to observe only
 frontier/actor fallbacks.
 

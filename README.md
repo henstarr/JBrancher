@@ -403,11 +403,28 @@ task. The recovery episode is retained locally, so stale shortcuts add failure
 evidence instead of becoming a dead end.
 
 The frontier actor is open-world: it may handle a task with no registered route
-or candidate. Replay is intentionally narrower. To replay a learned action, the
-harness must expose that action in its current `getCandidates` capability set;
-this lets a route be discovered freely while keeping execution authorization in
-the harness. A dynamic tool/capability catalog is the recommended way to make
-newly discovered routes available without manually registering every task.
+or candidate. Replay is intentionally narrower. By default, a learned action
+must appear in the current `getCandidates` capability set. If enumerating a
+large or dynamic tool catalog is impractical, provide `authorize` instead (or
+in addition); JBrancher asks the harness whether each learned action is legal
+right now:
+
+```js
+const brancher = createJBrancher({
+  getCandidates: ({ state }) => harness.authorizedActions(state), // optional
+  authorize: ({ action, state, task }) => harness.canExecute(action, { state, task }),
+  actor: context => frontier.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: store
+});
+```
+
+With `authorize`, an action learned from an unregistered frontier episode can
+be replayed even when the harness cannot enumerate it. The callback is the
+execution authorization boundary: a truthy result is required for every
+single-step or workflow action, and an exception or false result falls back to
+the frontier actor. A dynamic capability catalog remains useful when the
+harness can provide one, but no hand-written route registration is required.
 
 By default, an actor fallback is recorded even when it selects no tool (for
 example, a direct answer or an intentional no-op). That still becomes a
@@ -420,7 +437,8 @@ If your harness has a strong verifier and wants to learn writes or other
 side-effecting actions, opt in explicitly with
 `learningPromotionMode: 'verified'`. JBrancher then requires a successful
 `learningOutcome` result for every observation and still executes the learned
-action only when the current `getCandidates` result authorizes it:
+action only when the current `getCandidates` result or `authorize` callback
+authorizes it:
 
 ```js
 const brancher = createJBrancher({

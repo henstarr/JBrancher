@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createJBrancher, withJBrancher } from '../src/index.js';
+import { createJBrancher, sameAction, withJBrancher } from '../src/index.js';
 import { createLocalLearningStore } from '../src/learning.js';
 import { createJBrancherServer } from '../src/server.js';
 
@@ -219,6 +219,47 @@ test('generic runtime learns an open-world route before replaying it when author
     assert.equal(warm.decision.source, 'learned');
     assert.equal(actorCalls, 2);
     assert.equal((await store.readTraces()).length, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('generic runtime replays an open-world route through authorization without enumerating candidates', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-authorize-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const action = { tool: 'inspect', args: { target: 'runtime' } };
+    let actorCalls = 0;
+    let authorizationCalls = 0;
+    const brancher = createJBrancher({
+      // The harness cannot cheaply enumerate all of its dynamic tools.
+      getCandidates: async () => [],
+      authorize: async ({ action: candidate }) => {
+        authorizationCalls++;
+        return sameAction(candidate, action);
+      },
+      actor: async () => {
+        actorCalls++;
+        return { action };
+      },
+      execute: async () => 'inspected',
+      learningStore: store,
+      learningSource: 'dynamic-tool-harness',
+      learningPromotionMode: 'verified',
+      learningOutcome: () => true
+    });
+
+    const first = await brancher.step({ task: 'Inspect the runtime' });
+    const second = await brancher.step({ task: 'Inspect the runtime' });
+    assert.deepEqual([first.decision.source, second.decision.source], ['actor', 'actor']);
+    assert.equal(actorCalls, 2);
+    assert.equal((await store.readRoutes())[0].status, 'active');
+
+    const warm = await brancher.step({ task: 'Inspect the runtime' });
+    assert.equal(warm.decision.source, 'learned');
+    assert.equal(warm.decision.action.tool, 'inspect');
+    assert.equal(actorCalls, 2);
+    assert.ok(authorizationCalls >= 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

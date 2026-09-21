@@ -193,10 +193,8 @@ open-world portion until the local dataset contains enough verified evidence.
 
 The frontier path and replay path have different trust boundaries. The actor may
 choose a new action on an unmatched request, but a learned action is replayed
-only when the harness exposes the same action through its current capability
-catalog. In a generic integration, make `getCandidates` derive from current
-state, permissions, and tool availability rather than from a static list of
-registered prompts:
+only when the harness authorizes it at the time of execution. When the harness
+can enumerate its current capabilities, use `getCandidates`:
 
 ```js
 const brancher = createJBrancher({
@@ -213,6 +211,27 @@ If `authorizedActions` returns an empty array, the actor still handles the
 request and the episode is recorded as `routeResolution: "unmatched"`. When a
 later state exposes the action as legal, the same local evidence can become a
 fast path without adding a hand-written route.
+
+For harnesses with large or dynamic tool catalogs, use `authorize` instead of
+requiring a complete candidate list:
+
+```js
+const brancher = createJBrancher({
+  getCandidates: ({ state }) => harness.authorizedActions(state), // optional
+  authorize: ({ action, state, task }) => harness.canExecute(action, { state, task }),
+  actor: context => frontier.nextAction(context),
+  execute: (action, context) => harness.execute(action, context),
+  learningStore: learner.store
+});
+```
+
+When `authorize` is supplied, it is called for every learned action before
+replay, including every step of a learned workflow. It may approve an action
+that is absent from an empty or incomplete candidate catalog, which lets an
+unknown route become reusable without pre-registering it. A false result or
+authorization error abandons the shortcut and returns control to the frontier
+actor. The callback should enforce the same permissions, workspace boundaries,
+and tool policy as the harness executor.
 
 ## Generalizing safe argument slots
 
@@ -232,8 +251,8 @@ lookup {{jbrancher.slot.key-query}} in docs
 ```
 
 The slot is extracted from a later task and filled into the action only after
-the harness exposes the resulting action in its current authorized candidate
-set. Constant arguments remain fixed. The learner only creates this template
+the harness exposes or authorizes the resulting action in its current state.
+Constant arguments remain fixed. The learner only creates this template
 after seeing different values, and it stores the placeholder rather than the
 observed argument value. This is a generic-harness feature; Pi's built-in
 executor continues to use its stricter read and inspection route adapters.
@@ -247,7 +266,7 @@ The same slot mechanism supports multi-step workflows. A successful trajectory
 with two or more actions can become an `action-template-workflow` route when
 the task-visible argument changes across repeated examples. At replay time,
 JBrancher fills the argument in every step and asks the harness for the current
-authorized candidate set before each execution. This keeps workflow reuse
+authorized candidate set or `authorize` callback before each execution. This keeps workflow reuse
 compatible with capability drift; a missing or changed step causes the runtime
 to abandon the shortcut and return to the frontier actor.
 
