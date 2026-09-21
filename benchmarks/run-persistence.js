@@ -14,9 +14,13 @@ import { createLocalLearningStore } from './src/learning.js';
 
 const store = createLocalLearningStore({ directory: process.env.JBRANCHER_BENCH_DIR });
 let actorCalls = 0;
+let authorizationChecks = 0;
 const action = { tool: 'read', args: { path: 'README.md' } };
 const brancher = createJBrancher({
-  getCandidates: () => [action],
+  authorize: async ({ action: candidate }) => {
+    authorizationChecks++;
+    return candidate?.tool === action.tool && candidate?.args?.path === action.args.path;
+  },
   actor: async () => {
     actorCalls++;
     return { action, usage: [{ provider: 'frontier-fixture', inputTokens: 1200, outputTokens: 80 }] };
@@ -35,6 +39,7 @@ console.log(JSON.stringify({
   source: event.decision.source,
   routeResolution: event.decision.routeResolution,
   actorCalls,
+  authorizationChecks,
   routeStatuses: routes.map(route => route.status),
   traces: traces.length
 }));
@@ -53,10 +58,12 @@ try {
 
   const sources = rows.map(row => row.source);
   const actorCalls = rows.map(row => row.actorCalls);
+  const authorizationChecks = rows.map(row => row.authorizationChecks);
   const finalRow = rows.at(-1);
   const files = await readdir(directory);
   const passed = JSON.stringify(sources) === JSON.stringify(['actor', 'actor', 'learned'])
     && JSON.stringify(actorCalls) === JSON.stringify([1, 1, 0])
+    && finalRow.authorizationChecks > 0
     && finalRow.routeStatuses.includes('active')
     && finalRow.traces === 2
     && files.includes('traces.jsonl')
@@ -64,8 +71,10 @@ try {
   const result = {
     benchmark: 'JBrancher local persistence across harness restarts',
     processRestarts: 2,
+    candidateEnumeration: false,
     sources,
     actorCalls,
+    authorizationChecks,
     finalRouteStatuses: finalRow.routeStatuses,
     durableTraceRows: finalRow.traces,
     localFiles: files.sort(),

@@ -11,6 +11,8 @@
 - Add an opt-in real SWE-bench test-boundary replay benchmark with disposable
   git worktrees, official test/gold patches, verified dynamic authorization,
   and optional persistent local learning state.
+- Strengthen the restart benchmark to learn and replay an unregistered route
+  through dynamic authorization without enumerating candidates.
 
 ## 0.1.0 - 2026-09-17
 

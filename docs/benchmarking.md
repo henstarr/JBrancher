@@ -40,9 +40,10 @@ CLI demo. It is the fastest check that a user can install JBrancher without
 depending on the repository checkout.
 
 `bench:persistence` runs three separate Node processes against one temporary
-local learning directory. It verifies that two successful frontier episodes
-survive process boundaries and that the third process replays the learned route
-without calling the frontier actor or an external database.
+local learning directory without enumerating candidates. It verifies that two
+successful frontier episodes survive process boundaries and that the third
+process replays the learned route through dynamic authorization without calling
+the frontier actor or an external database.
 
 `bench:verified-patch` exercises side effects against a real temporary project:
 the frontier fixture writes a bug fix and runs a focused test, then JBrancher

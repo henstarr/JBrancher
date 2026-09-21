@@ -292,8 +292,9 @@ persistence benchmark:
 npm run bench:persistence -- --assert
 ```
 
-It runs three separate processes against one temporary `.jbrancher` directory
-and verifies the progression `frontier → frontier → learned` with zero
+It runs three separate processes against one temporary `.jbrancher` directory,
+does not enumerate candidates, and verifies the progression
+`frontier → frontier → learned` through dynamic authorization with zero
 external-database dependency.
 
 To exercise verified side effects against a real temporary project:
