@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLocalLearningStore, importDatasetExamples, mergeDatasetExamples, refreshAndPromoteReadOnly } from '../src/learning.js';
+import { createLocalLearningStore, findLearnedWorkflows, importDatasetExamples, mergeDatasetExamples, refreshAndPromoteReadOnly } from '../src/learning.js';
 
 const fixture = JSON.parse(await readFile(new URL('./fixtures/swebench-lite-mini.json', import.meta.url), 'utf8'));
 
@@ -54,6 +54,12 @@ try {
   });
   const importedLearning = await refreshAndPromoteReadOnly(importedStore, { minimumObservations: 2 });
   const importedRoutes = await importedStore.readRoutes();
+  const warmStartMatches = instances.filter(instance => {
+    const task = `${instance.instance_id}: inspect the failing test and repository overview`;
+    return findLearnedWorkflows(importedRoutes, task).length > 0;
+  }).length;
+  const warmStartReplayedEpisodes = warmStartMatches * repetitions;
+  const warmStartFrontierCalls = raw.examples.length - warmStartReplayedEpisodes;
   const report = {
     benchmark: 'JBrancher local dataset curation',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
@@ -73,6 +79,11 @@ try {
     importedActiveReadOnlyRoutes: importedRoutes.filter(route => route.status === 'active' && route.safety === 'read-only').length,
     importedPromotedRoutes: importedLearning.promoted.length,
     portableImportNoExternalDatabase: true,
+    warmStartWorkflowCoverage: Number((warmStartMatches / instances.length).toFixed(3)),
+    warmStartReplayedEpisodes,
+    warmStartFrontierCalls,
+    warmStartFrontierCallsAvoided: raw.examples.length - warmStartFrontierCalls,
+    warmStartFrontierCallReduction: Number((1 - warmStartFrontierCalls / raw.examples.length).toFixed(3)),
     reusableCuratedExamples: curated.examples.filter(example => example.reusable).length,
     uniqueFingerprints: new Set(curated.examples.map(example => example.fingerprint)).size
   };
@@ -90,6 +101,11 @@ try {
     assert.equal(report.importedActiveReadOnlyRoutes, report.curatedExamples);
     assert.equal(report.importedPromotedRoutes, report.curatedExamples);
     assert.equal(report.portableImportNoExternalDatabase, true);
+    assert.equal(report.warmStartWorkflowCoverage, 1);
+    assert.equal(report.warmStartReplayedEpisodes, report.rawExamples);
+    assert.equal(report.warmStartFrontierCalls, 0);
+    assert.equal(report.warmStartFrontierCallsAvoided, report.rawExamples);
+    assert.equal(report.warmStartFrontierCallReduction, 1);
     assert.equal(report.uniqueFingerprints, report.curatedExamples);
     assert.equal(report.reusableCuratedExamples, report.curatedExamples);
     assert.equal(report.curationRatio, Number((1 - 1 / repetitions).toFixed(3)));
