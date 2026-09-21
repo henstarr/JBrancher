@@ -807,6 +807,8 @@ The latest real-Codex actor-learning run is recorded in
 [docs/live-codex-2026-09-21.md](docs/live-codex-2026-09-21.md).
 The experimental live Codex argument-template pilot is recorded in
 [docs/live-codex-template-2026-09-21.md](docs/live-codex-template-2026-09-21.md).
+The latest four-value live template run is recorded in
+[docs/live-codex-template-4values-2026-09-20.md](docs/live-codex-template-4values-2026-09-20.md).
 The latest three-task live-Codex run is recorded in
 [docs/live-codex-3tasks-2026-09-21.md](docs/live-codex-3tasks-2026-09-21.md).
 The latest seven-task live-Codex run is recorded in

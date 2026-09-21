@@ -278,6 +278,12 @@ it reduced actor calls from 3 to 2, saved 15,915 observed provider tokens, and
 replayed an unseen query after two verified teaching episodes. Its independently
 sampled actor-only arm was not a perfect oracle in that small run, so it is
 evidence of replay/cost behavior, not a model-quality estimate.
+The latest four-value run is in
+[docs/live-codex-template-4values-2026-09-20.md](live-codex-template-4values-2026-09-20.md);
+it reduced actor calls from 4 to 2, saved 31,959 observed provider tokens,
+and served both novel values locally with 100% learned-route coverage. The
+benchmark now records semantically wrong frontier actions as failed teaching
+postconditions and retries bounded teaching episodes instead of crashing.
 The current-model compatibility run is in
 [docs/live-jev-latest-2026-09-21.md](live-jev-latest-2026-09-21.md); it used
 `jev-latest`, observed the concrete serving revision, and preserved 100% route

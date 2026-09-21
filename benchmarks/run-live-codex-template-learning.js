@@ -118,8 +118,13 @@ try {
   const store = createLocalLearningStore({ directory: join(root, 'learning') });
   const learnedUsageRows = [];
   const learnedRows = [];
+  const teachingRows = [];
+  const novelRows = [];
   let actorCalls = 0;
-  for (const [index, value] of values.entries()) {
+  const teachingValues = values.slice(0, 2);
+  const novelValues = values.slice(2);
+
+  async function runLearnedValue(value, index, phase, attempt) {
     const task = `lookup ${value} in docs`;
     const expected = expectedAction(value);
     const brancher = createJBrancher({
@@ -130,26 +135,51 @@ try {
         learnedUsageRows.push(result.usage);
         return { action: result.action, usage: [{ provider: 'codex', status: 'succeeded', ...result.usage }] };
       },
-      execute: async action => {
-        assert.deepEqual(action, expected);
-        return `lookup results for ${value}`;
-      },
+      execute: async action => ({
+        correct: JSON.stringify(action) === JSON.stringify(expected),
+        output: `lookup results for ${value}`
+      }),
       learningStore: store,
       learningSource: 'live-codex-template-learning',
       learningCwd: root,
       learningPromotionMode: 'verified',
       learningMinimumObservations: 2,
-      learningOutcome: ({ event }) => JSON.stringify(event?.decision?.action) === JSON.stringify(expected)
+      learningOutcome: ({ event }) => event?.result?.correct === true
     });
     const started = performance.now();
     const result = await brancher.step({ task, state: { scope: 'docs', index } });
-    learnedRows.push({
+    return {
       value,
+      phase,
+      attempt,
       source: result.decision.source,
       correct: JSON.stringify(result.decision.action) === JSON.stringify(expected),
       elapsedMs: Number((performance.now() - started).toFixed(1)),
       usage: result.decision.usage ?? []
-    });
+    };
+  }
+
+  // A frontier actor can return a well-formed but wrong action. Treat that as
+  // a failed teaching postcondition and retry a bounded number of times rather
+  // than crashing the benchmark or allowing bad evidence into the route cache.
+  for (const [index, value] of teachingValues.entries()) {
+    let verified = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const row = await runLearnedValue(value, index, 'teaching', attempt);
+      learnedRows.push(row);
+      teachingRows.push(row);
+      if (row.source === 'actor' && row.correct) {
+        verified = true;
+        break;
+      }
+    }
+    if (!verified) throw new Error(`Codex did not produce a verified teaching action for ${value}`);
+  }
+
+  for (const [offset, value] of novelValues.entries()) {
+    const row = await runLearnedValue(value, offset + teachingValues.length, 'novel', 1);
+    learnedRows.push(row);
+    novelRows.push(row);
   }
 
   const routes = await store.readRoutes();
@@ -166,6 +196,10 @@ try {
     actorCallReduction: Number(((values.length - actorCalls) / values.length).toFixed(3)),
     baselineUsage,
     learnedUsage,
+    teachingValues,
+    novelValues,
+    verifiedTeachingEpisodes: teachingRows.filter(row => row.correct).length,
+    novelFrontierCalls: novelRows.filter(row => row.source === 'actor').length,
     providerTokensSaved: (baselineUsage.inputTokens + baselineUsage.outputTokens)
       - (learnedUsage.inputTokens + learnedUsage.outputTokens),
     templateRoutes: templateRoutes.map(route => ({
@@ -178,19 +212,20 @@ try {
     baselineTaskSuccessRate: baselineRows.filter(row => row.correct).length / baselineRows.length,
     learnedTaskSuccessRate: learnedRows.filter(row => row.correct).length / learnedRows.length,
     learnedTaskSuccess: learnedRows.every(row => row.correct),
-    learnedRouteCoverage: learnedRows.slice(2).every(row => row.source === 'learned' && row.correct),
+    novelTaskSuccessRate: novelRows.length === 0 ? 1 : novelRows.filter(row => row.correct).length / novelRows.length,
+    learnedRouteCoverage: novelRows.length > 0 && novelRows.every(row => row.source === 'learned' && row.correct),
     baselineRows,
     learnedRows,
     caveat: 'Real Codex actor decisions with a deterministic lookup executor; not an official SWE-bench patch-resolution score.'
   };
 
   if (shouldAssert) {
-    // The live baseline is intentionally measured, not treated as an oracle:
-    // a frontier model can make a wrong selection. The learning arm must still
-    // succeed on its teaching examples and every later local replay.
-    assert.ok(learnedRows.slice(0, 2).every(row => row.correct));
+    // The live baseline is intentionally measured, not treated as an oracle.
+    // The learning arm must collect two verified teaching episodes and then
+    // serve every novel value locally.
+    assert.equal(report.verifiedTeachingEpisodes, teachingValues.length);
     assert.ok(report.learnedTaskSuccess);
-    assert.equal(actorCalls, 2);
+    assert.equal(report.novelFrontierCalls, 0);
     assert.ok(report.learnedRouteCoverage);
     assert.equal(templateRoutes.length, 1);
     assert.equal(templateRoutes[0].status, 'active');
