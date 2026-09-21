@@ -285,6 +285,18 @@ This keeps every raw observation for learning evidence while collapsing
 repeated task/action trajectories into one export row with aggregate outcome
 and source counts.
 
+When several learned routes match the same task, JBrancher uses a conservative
+evidence-aware selector: more specific matchers win, equally specific routes
+need a 2× evidence advantage, and ties return to the frontier actor. Run the
+regression benchmark with:
+
+```sh
+npm run bench:selection -- --assert
+```
+
+The benchmark uses a real SWE-bench Lite problem statement and local redacted
+traces. It measures routing reuse, not official patch resolution.
+
 To prove that the improvement survives harness restarts, run the local
 persistence benchmark:
 

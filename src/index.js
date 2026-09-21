@@ -1,4 +1,4 @@
-import { createEpisodeRecorder, createLocalLearningStore, findLearnedActions, findLearnedWorkflows, refreshAndPromoteReadOnly } from './learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, findLearnedActions, findLearnedWorkflows, refreshAndPromoteReadOnly, selectLearnedAction, selectLearnedWorkflow } from './learning.js';
 
 const clone = value => structuredClone(value);
 
@@ -145,7 +145,8 @@ export function createJBrancher({
 
     if (learningStore && (getCandidates || authorize) && typeof learningStore.readRoutes === 'function') {
       try {
-        const learned = findLearnedActions(await learningStore.readRoutes(), task, {
+        const learnedRecords = await learningStore.readRoutes();
+        const learned = findLearnedActions(learnedRecords, task, {
           allowVerified: learningPromotionMode === 'verified'
         })
         const authorized = [];
@@ -173,8 +174,9 @@ export function createJBrancher({
           }
           authorized.push(match);
         }
-        if (authorized.length === 1) {
-          return { source: 'learned', action: clone(authorized[0].action), routeId: authorized[0].id,
+        const selected = selectLearnedAction(authorized, learnedRecords);
+        if (selected) {
+          return { source: 'learned', action: clone(selected.action), routeId: selected.id,
             routeResolution: 'learned',
             reason: 'A proven local route matched', usage: [] };
         }
@@ -397,21 +399,24 @@ export function createJBrancher({
       || typeof learningStore.readRoutes !== 'function') return null;
     const task = String(input.task ?? '');
     let workflows;
+    let workflowRecords;
     try {
-      workflows = findLearnedWorkflows(await learningStore.readRoutes(), task, {
+      workflowRecords = await learningStore.readRoutes();
+      workflows = findLearnedWorkflows(workflowRecords, task, {
         allowVerified: learningPromotionMode === 'verified'
       });
     } catch {
       return null;
     }
-    if (workflows.length !== 1 || workflows[0].actions.length > maxSteps) return null;
-    if (workflows[0].actions.length > 1 && typeof input.observe !== 'function') return null;
+    const workflow = selectLearnedWorkflow(workflows, workflowRecords);
+    if (!workflow || workflow.actions.length > maxSteps) return null;
+    if (workflow.actions.length > 1 && typeof input.observe !== 'function') return null;
 
     let state = clone(initialState);
     let history = clone(initialHistory);
     const events = [];
-    for (let stepNumber = 0; stepNumber < workflows[0].actions.length; stepNumber++) {
-      const action = workflows[0].actions[stepNumber];
+    for (let stepNumber = 0; stepNumber < workflow.actions.length; stepNumber++) {
+      const action = workflow.actions[stepNumber];
       let candidates = [];
       if (getCandidates) {
         try {
@@ -437,7 +442,7 @@ export function createJBrancher({
         }
         if (!allowed) return null;
       }
-      const decision = { source: 'learned', action: clone(action), routeId: workflows[0].id,
+      const decision = { source: 'learned', action: clone(action), routeId: workflow.id,
         routeResolution: 'learned',
         reason: 'A proven local workflow matched', usage: [] };
       const event = { step: stepNumber, state: clone(state), decision: clone(decision) };
@@ -447,7 +452,7 @@ export function createJBrancher({
         });
       } catch (error) {
         if (typeof learningStore.recordRouteFailure === 'function') {
-          await learningStore.recordRouteFailure(workflows[0].id, { reason: error?.message || String(error) }).catch(() => {});
+          await learningStore.recordRouteFailure(workflow.id, { reason: error?.message || String(error) }).catch(() => {});
         }
         return null;
       }
@@ -457,7 +462,7 @@ export function createJBrancher({
       if (typeof input.observe !== 'function') break;
       state = clone(await input.observe({ state: clone(state), event: clone(event), history: clone(history) }));
     }
-    return { events, state, history, learningRouteId: workflows[0].id };
+    return { events, state, history, learningRouteId: workflow.id };
   }
 
   async function run(input = {}) {

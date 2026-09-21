@@ -89,6 +89,23 @@ that all 14 SWE-bench-derived workflows become local active routes without
 importing verification claims. A second import is also run and must skip all 56
 existing observations, proving the local import is idempotent.
 
+The evidence-selection benchmark measures the next step in continuous local
+improvement: when more than one active route matches the same task, a more
+specific matcher wins; equally specific routes are replayed only when one has
+at least twice the observed evidence. A tied or otherwise ambiguous choice
+still falls back to the frontier actor. Against a real SWE-bench Lite problem
+statement and redacted local traces, the benchmark replayed six tasks with
+zero actor calls while preserving the expected action, and separately verified
+that a tied pair falls back to the actor:
+
+```sh
+npm run bench:selection -- --assert
+```
+
+This is a routing-efficiency benchmark, not an official patch-resolution score.
+The selector is deliberately conservative: stronger history can reduce
+frontier calls, but it cannot override the harness authorization callback.
+
 The paired cost fixture uses the same task set, actor, and completion oracle for
 actor-only, rules-only, and JBrancher arms. It reports task success, actor and
 Jev calls, input/output tokens, token reduction, and latency:

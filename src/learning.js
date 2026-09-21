@@ -497,6 +497,69 @@ export function findLearnedActions(records = [], task = '', options = {}) {
     === actionKey(match.action.tool, match.action.args)) === index);
 }
 
+const MATCHER_SPECIFICITY = Object.freeze({
+  'normalized-exact': 4,
+  'read-path': 3,
+  'action-template': 2,
+  'action-template-workflow': 2,
+  'token-similarity': 1
+});
+
+function routeEvidence(record) {
+  const observations = Number.isSafeInteger(record?.observations) && record.observations > 0
+    ? record.observations : 0;
+  const successfulReplays = Number.isSafeInteger(record?.successfulReplays) && record.successfulReplays > 0
+    ? record.successfulReplays : 0;
+  const failures = Number.isSafeInteger(record?.failures) && record.failures > 0
+    ? record.failures : 0;
+  return { observations, successfulReplays, failures, evidence: observations + successfulReplays };
+}
+
+/**
+ * Select one learned action only when the evidence makes the choice safe
+ * enough to be deterministic. Exact matchers outrank generalized matchers;
+ * equally specific routes need a two-to-one evidence advantage. Ambiguity is
+ * intentionally preserved as a frontier fallback instead of guessing.
+ */
+function selectLearnedMatch(matches, records, { minimumEvidenceRatio = 2 } = {}) {
+  if (!Array.isArray(matches) || !Array.isArray(records)) {
+    throw new TypeError('matches and records must be arrays');
+  }
+  if (!Number.isFinite(minimumEvidenceRatio) || minimumEvidenceRatio < 1) {
+    throw new TypeError('minimumEvidenceRatio must be at least 1');
+  }
+  if (matches.length === 0) return null;
+  if (matches.length === 1) return matches[0];
+
+  const recordsById = new Map(records.map(record => [record?.id, record]));
+  const ranked = matches.map((match, index) => {
+    const record = recordsById.get(match?.id);
+    const evidence = routeEvidence(record);
+    return {
+      match,
+      index,
+      specificity: MATCHER_SPECIFICITY[record?.matcher?.type] ?? 0,
+      ...evidence
+    };
+  }).sort((left, right) => {
+    if (right.specificity !== left.specificity) return right.specificity - left.specificity;
+    if (right.evidence !== left.evidence) return right.evidence - left.evidence;
+    if (left.failures !== right.failures) return left.failures - right.failures;
+    return left.index - right.index;
+  });
+
+  const [best, second] = ranked;
+  if (best.specificity > second.specificity) return best.match;
+  if (best.failures > 0 || second.failures > 0) return null;
+  const requiredEvidence = Math.max(1, second.evidence) * minimumEvidenceRatio;
+  if (best.evidence >= requiredEvidence && best.evidence > second.evidence) return best.match;
+  return null;
+}
+
+export function selectLearnedAction(matches = [], records = [], options = {}) {
+  return selectLearnedMatch(matches, records, options);
+}
+
 export function createLearnedActions(records = [], task = '', options = {}) {
   return findLearnedActions(records, task, options).map(match => match.action);
 }
@@ -523,6 +586,10 @@ export function findLearnedWorkflows(records = [], task = '', options = {}) {
       }))
     };
   }).filter(Boolean);
+}
+
+export function selectLearnedWorkflow(matches = [], records = [], options = {}) {
+  return selectLearnedMatch(matches, records, options);
 }
 
 export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilarity = 0.8 } = {}) {

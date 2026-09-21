@@ -286,6 +286,51 @@ test('generic runtime replays an open-world route through authorization without 
   }
 });
 
+test('generic runtime chooses the stronger of ambiguous learned routes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-selection-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    await store.writeRoutes([
+      {
+        id: 'strong-route',
+        status: 'active',
+        safety: 'read-only',
+        matcher: { type: 'normalized-exact', value: 'inspect the issue' },
+        observations: 4,
+        action: { toolName: 'read', input: { path: 'issue.md' } }
+      },
+      {
+        id: 'weak-route',
+        status: 'active',
+        safety: 'read-only',
+        matcher: { type: 'normalized-exact', value: 'inspect the issue' },
+        observations: 1,
+        action: { toolName: 'read', input: { path: 'README.md' } }
+      }
+    ]);
+    let actorCalls = 0;
+    const brancher = createJBrancher({
+      learningStore: store,
+      authorize: async () => true,
+      actor: async () => { actorCalls++; return { action: { tool: 'read', args: { path: 'fallback.md' } } }; },
+      execute: async action => ({ ok: true, path: action.args.path })
+    });
+    const result = await brancher.step({ task: 'inspect the issue' });
+    assert.equal(result.decision.source, 'learned');
+    assert.equal(result.decision.routeId, 'strong-route');
+    assert.equal(result.result.path, 'issue.md');
+    assert.equal(actorCalls, 0);
+
+    const routes = await store.readRoutes();
+    await store.writeRoutes(routes.map(route => ({ ...route, observations: 2 })));
+    const tied = await brancher.step({ task: 'inspect the issue' });
+    assert.equal(tied.decision.source, 'actor');
+    assert.equal(actorCalls, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic runtime abandons a learned route when dynamic authorization is revoked', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-authorize-revoked-'));
   try {

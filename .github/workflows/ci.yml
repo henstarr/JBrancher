@@ -35,6 +35,7 @@ jobs:
       - run: npm run bench:template-learning -- --assert
       - run: npm run bench:template-workflow-learning -- --assert
       - run: npm run bench:dataset -- --assert
+      - run: npm run bench:selection -- --assert
       - run: npm run bench:persistence -- --assert
       - run: npm run bench:verified-patch -- --assert
       - run: npm run bench:proxy -- --assert

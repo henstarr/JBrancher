@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, importDatasetExamples, mergeDatasetExamples, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, importDatasetExamples, mergeDatasetExamples, proposeRoutes, redactText, refreshAndPromoteReadOnly, selectLearnedAction, selectLearnedWorkflow, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -368,6 +368,50 @@ test('learning derives a conservative action template from varied frontier argum
     action: { tool: 'lookup', args: { query: 'payments', scope: 'docs' } }
   }]);
   assert.deepEqual(findLearnedActions([candidate], 'lookup payments in tickets', { allowVerified: true }), []);
+});
+
+test('learned action selection uses specificity and strong evidence but abstains on ties', () => {
+  const records = [
+    {
+      id: 'exact-route',
+      status: 'active',
+      safety: 'read-only',
+      matcher: { type: 'normalized-exact', value: 'inspect the issue' },
+      observations: 1,
+      action: { toolName: 'read', input: { path: 'issue.md' } }
+    },
+    {
+      id: 'general-route',
+      status: 'active',
+      safety: 'read-only',
+      matcher: { type: 'token-similarity', values: ['inspect issue'], minimumScore: 0.8 },
+      observations: 20,
+      action: { toolName: 'read', input: { path: 'README.md' } }
+    }
+  ];
+  const matches = [
+    { id: 'exact-route', action: { tool: 'read', args: { path: 'issue.md' } } },
+    { id: 'general-route', action: { tool: 'read', args: { path: 'README.md' } } }
+  ];
+  assert.equal(selectLearnedAction(matches, records).id, 'exact-route');
+
+  records[0].matcher = records[1].matcher;
+  records[0].observations = 20;
+  assert.equal(selectLearnedAction(matches, records), null);
+  records[0].observations = 40;
+  assert.equal(selectLearnedAction(matches, records).id, 'exact-route');
+
+  const workflows = [
+    { id: 'strong-workflow', actions: [{ tool: 'read', args: { path: 'issue.md' } }] },
+    { id: 'weak-workflow', actions: [{ tool: 'read', args: { path: 'README.md' } }] }
+  ];
+  const workflowRecords = records.map(record => ({
+    ...record,
+    id: record.id === 'exact-route' ? 'strong-workflow' : 'weak-workflow',
+    matcher: { type: 'action-template-workflow', template: 'inspect the issue' },
+    observations: record.id === 'exact-route' ? 4 : 1
+  }));
+  assert.equal(selectLearnedWorkflow(workflows, workflowRecords).id, 'strong-workflow');
 });
 
 test('learning derives a parameterized multi-step workflow and fills every step', () => {
