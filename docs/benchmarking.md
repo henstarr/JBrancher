@@ -273,7 +273,7 @@ and the larger three-task sample is in
 [docs/live-codex-3tasks-2026-09-20.md](live-codex-3tasks-2026-09-20.md).
 The latest one-task run with the current learner is in
 [docs/live-codex-2026-09-21.md](live-codex-2026-09-21.md); it preserved 100%
-fixture success while saving 15,937 observed Codex provider tokens.
+fixture success while saving 15,953 observed Codex provider tokens.
 
 To measure live frontier usage for the parameterized action-template learner:
 
@@ -294,7 +294,7 @@ reduced Codex actor calls from 28 to 14 and saved 223,413 observed provider
 tokens while preserving 100% task success and learned-route coverage.
 The experimental live argument-template pilot is in
 [docs/live-codex-template-2026-09-21.md](live-codex-template-2026-09-21.md);
-it reduced actor calls from 3 to 2, saved 15,915 observed provider tokens, and
+it reduced actor calls from 3 to 2, saved 15,923 observed provider tokens, and
 replayed an unseen query after two verified teaching episodes. Its independently
 sampled actor-only arm was not a perfect oracle in that small run, so it is
 evidence of replay/cost behavior, not a model-quality estimate.
