@@ -36,7 +36,8 @@ test('open-world learner records any unmatched episode and promotes repeated saf
       failures: 0,
       successRate: null,
       activeRoutesWithReplays: 0,
-      estimatedFrontierStepsAvoided: 0
+      estimatedFrontierStepsAvoided: 0,
+      estimatedProviderTokensAvoided: 0
     });
     assert.equal(snapshot.replayTelemetry[0].observations, 2);
   } finally {
@@ -50,7 +51,12 @@ test('open-world snapshot reports replay value and quarantined failures', async 
     const learner = createOpenWorldLearner({ directory });
     for (const id of ['first', 'second']) {
       const episode = learner.begin({ task: 'inspect package.json', routeResolution: 'unmatched' });
-      episode.recordToolCall({ toolCallId: id, toolName: 'read', input: { path: 'package.json' } });
+      episode.recordToolCall({
+        toolCallId: id,
+        toolName: 'read',
+        input: { path: 'package.json' },
+        context: { selection: { usage: [{ inputTokens: 120, outputTokens: 10 }] } }
+      });
       episode.recordToolResult({ toolCallId: id, isError: false, content: [{ type: 'text', text: 'ok' }] });
       await episode.finish({ outcome: 'success' });
     }
@@ -63,9 +69,19 @@ test('open-world snapshot reports replay value and quarantined failures', async 
       failures: 0,
       successRate: 1,
       activeRoutesWithReplays: 1,
-      estimatedFrontierStepsAvoided: 1
+      estimatedFrontierStepsAvoided: 1,
+      estimatedProviderTokensAvoided: 130
     });
     assert.equal(snapshot.replayTelemetry[0].replaySuccessRate, 1);
+    assert.deepEqual(snapshot.replayTelemetry[0].observedUsage, {
+      usageRows: 2,
+      observedInputRows: 2,
+      observedOutputRows: 2,
+      inputTokens: 240,
+      outputTokens: 20,
+      totalTokens: 260
+    });
+    assert.equal(snapshot.replayTelemetry[0].estimatedProviderTokensAvoided, 130);
 
     await learner.store.recordRouteFailure(route.id, { reason: 'capability changed' });
     snapshot = await learner.snapshot();

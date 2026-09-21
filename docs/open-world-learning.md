@@ -113,7 +113,8 @@ quarantine state, and estimated frontier steps avoided. This lets a local
 harness measure whether a promoted shortcut is actually earning reuse rather
 than merely accumulating observations. When the harness supplies numeric
 decision usage, the snapshot also reports observed input, output, and total
-tokens for the recorded frontier/Jev decisions.
+tokens for the recorded frontier/Jev decisions, plus estimated provider tokens
+avoided by successful replays.
 
 No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the

@@ -2,56 +2,9 @@ import { randomUUID } from 'node:crypto';
 import {
   createEpisodeRecorder,
   createLocalLearningStore,
-  refreshAndPromoteReadOnly
+  refreshAndPromoteReadOnly,
+  summarizeTraceUsage
 } from './learning.js';
-
-const usageKeys = {
-  input: ['input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokens'],
-  output: ['output_tokens', 'outputTokens', 'completion_tokens', 'completionTokens'],
-  total: ['total_tokens', 'totalTokens']
-};
-
-function usageValue(row, keys) {
-  for (const key of keys) {
-    if (typeof row?.[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0) return row[key];
-  }
-  return null;
-}
-
-function summarizeUsage(traces) {
-  const rows = traces.flatMap(trace => trace.toolCalls?.flatMap(call => {
-    const usage = call?.context?.selection?.usage;
-    if (Array.isArray(usage)) return usage;
-    return usage && typeof usage === 'object' ? [usage] : [];
-  }) || []);
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let totalTokens = 0;
-  let observedInputRows = 0;
-  let observedOutputRows = 0;
-  for (const row of rows) {
-    const input = usageValue(row, usageKeys.input);
-    const output = usageValue(row, usageKeys.output);
-    const total = usageValue(row, usageKeys.total);
-    if (input !== null) {
-      inputTokens += input;
-      observedInputRows++;
-    }
-    if (output !== null) {
-      outputTokens += output;
-      observedOutputRows++;
-    }
-    totalTokens += total ?? ((input ?? 0) + (output ?? 0));
-  }
-  return {
-    usageRows: rows.length,
-    observedInputRows,
-    observedOutputRows,
-    inputTokens,
-    outputTokens,
-    totalTokens
-  };
-}
 
 /**
  * Create the harness-neutral open-world learning boundary.
@@ -237,17 +190,24 @@ export function createOpenWorldLearner({
       const actionCount = Array.isArray(route.action?.actions)
         ? route.action.actions.length
         : route.action?.toolName ? 1 : 0;
+      const observedUsage = route.usage && typeof route.usage === 'object'
+        ? route.usage : summarizeTraceUsage([]);
+      const observations = Number.isSafeInteger(route.observations) ? route.observations : 0;
+      const averageTokensPerObservation = observations > 0
+        ? observedUsage.totalTokens / observations : 0;
       return {
         id: route.id,
         status: route.status,
         safety: route.safety,
-        observations: Number.isSafeInteger(route.observations) ? route.observations : 0,
+        observations,
         actionCount,
+        observedUsage,
         successfulReplays,
         failures,
         replayAttempts,
         replaySuccessRate: replayAttempts === 0 ? null : Number((successfulReplays / replayAttempts).toFixed(3)),
         estimatedFrontierStepsAvoided: successfulReplays * actionCount,
+        estimatedProviderTokensAvoided: Number((successfulReplays * averageTokensPerObservation).toFixed(3)),
         ...(route.lastReplayAt ? { lastReplayAt: route.lastReplayAt } : {}),
         ...(route.lastFailureAt ? { lastFailureAt: route.lastFailureAt } : {})
       };
@@ -271,11 +231,13 @@ export function createOpenWorldLearner({
         failures: replayFailures,
         successRate: replayAttempts === 0 ? null : Number((successfulReplays / replayAttempts).toFixed(3)),
         activeRoutesWithReplays: replayTelemetry.filter(route => route.status === 'active' && route.successfulReplays > 0).length,
-        estimatedFrontierStepsAvoided: replayTelemetry.reduce((total, route) => total + route.estimatedFrontierStepsAvoided, 0)
+        estimatedFrontierStepsAvoided: replayTelemetry.reduce((total, route) => total + route.estimatedFrontierStepsAvoided, 0),
+        estimatedProviderTokensAvoided: Number(replayTelemetry
+          .reduce((total, route) => total + route.estimatedProviderTokensAvoided, 0).toFixed(3))
       },
       outcomes,
       resolutions,
-      usage: summarizeUsage(traces)
+      usage: summarizeTraceUsage(traces)
     };
   }
 

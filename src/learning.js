@@ -5,6 +5,11 @@ import { appendFile, mkdir, open, readFile as readTextFile, rename, stat, unlink
 const SECRET_KEY = /(api[_-]?key|token|password|secret|authorization|cookie|private[_-]?key)/i;
 const SECRET_VALUE = /(Bearer\s+)[A-Za-z0-9._~+/=-]+|(?:sk|key|apikey)[_-][A-Za-z0-9_-]{16,}/gi;
 const USAGE_COUNT_KEY = /^(?:input|output|total|prompt|completion|cached|reasoning)[_-]?tokens?$/i;
+const USAGE_KEYS = {
+  input: ['input_tokens', 'inputTokens', 'prompt_tokens', 'promptTokens'],
+  output: ['output_tokens', 'outputTokens', 'completion_tokens', 'completionTokens'],
+  total: ['total_tokens', 'totalTokens']
+};
 const ROUTE_STOP_WORDS = new Set([
   'a', 'an', 'and', 'are', 'can', 'do', 'for', 'from', 'how', 'i', 'in', 'is',
   'it', 'me', 'my', 'of', 'on', 'or', 'please', 'tell', 'that', 'the', 'this',
@@ -35,6 +40,54 @@ export function redactValue(value, depth = 0, maxDepth = 5) {
     key, (SECRET_KEY.test(key) && !(USAGE_COUNT_KEY.test(key) && typeof item === 'number'))
       ? '[REDACTED]' : redactValue(item, depth + 1, maxDepth)
   ]));
+}
+
+function usageValue(row, keys) {
+  for (const key of keys) {
+    if (typeof row?.[key] === 'number' && Number.isFinite(row[key]) && row[key] >= 0) return row[key];
+  }
+  return null;
+}
+
+/**
+ * Summarize numeric provider usage embedded in recorded decision contexts.
+ * Unknown provider fields are ignored; the trace itself remains the source of
+ * truth for later inspection and redaction.
+ */
+export function summarizeTraceUsage(traces = []) {
+  if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
+  const rows = traces.flatMap(trace => trace?.toolCalls?.flatMap(call => {
+    const usage = call?.context?.selection?.usage;
+    if (Array.isArray(usage)) return usage;
+    return usage && typeof usage === 'object' ? [usage] : [];
+  }) || []);
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let totalTokens = 0;
+  let observedInputRows = 0;
+  let observedOutputRows = 0;
+  for (const row of rows) {
+    const input = usageValue(row, USAGE_KEYS.input);
+    const output = usageValue(row, USAGE_KEYS.output);
+    const total = usageValue(row, USAGE_KEYS.total);
+    if (input !== null) {
+      inputTokens += input;
+      observedInputRows++;
+    }
+    if (output !== null) {
+      outputTokens += output;
+      observedOutputRows++;
+    }
+    totalTokens += total ?? ((input ?? 0) + (output ?? 0));
+  }
+  return {
+    usageRows: rows.length,
+    observedInputRows,
+    observedOutputRows,
+    inputTokens,
+    outputTokens,
+    totalTokens
+  };
 }
 
 export function normalizeTask(value) {
@@ -354,6 +407,7 @@ export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilari
           safety,
           verified: selectedTraces.every(trace => trace.metadata?.postconditionValidated === true),
           observations: selectedTraces.length,
+          usage: summarizeTraceUsage(selectedTraces),
           examples: selectedTraces.slice(-5).map(trace => trace.task),
           firstSeen: selectedTraces[0].createdAt,
           lastSeen: selectedTraces.at(-1).createdAt
@@ -397,6 +451,7 @@ function proposeReadPathRoutes(traces, { minimumObservations = 2 } = {}) {
         safety: 'read-only',
         verified: group.traces.every(trace => trace.metadata?.postconditionValidated === true),
         observations: group.traces.length,
+        usage: summarizeTraceUsage(group.traces),
         examples: group.traces.slice(-5).map(trace => trace.task),
         firstSeen: group.traces[0].createdAt,
         lastSeen: group.traces.at(-1).createdAt
