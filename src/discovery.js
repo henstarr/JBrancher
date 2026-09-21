@@ -215,6 +215,12 @@ export function createOpenWorldLearner({
     const replayAttempts = replayTelemetry.reduce((total, route) => total + route.replayAttempts, 0);
     const successfulReplays = replayTelemetry.reduce((total, route) => total + route.successfulReplays, 0);
     const replayFailures = replayTelemetry.reduce((total, route) => total + route.failures, 0);
+    const usage = summarizeTraceUsage(traces);
+    const estimatedProviderTokensAvoided = Number(replayTelemetry
+      .reduce((total, route) => total + route.estimatedProviderTokensAvoided, 0).toFixed(3));
+    const estimatedBaselineEquivalentProviderTokens = usage.totalTokens + estimatedProviderTokensAvoided;
+    const estimatedProviderTokenReduction = estimatedBaselineEquivalentProviderTokens > 0
+      ? Number((estimatedProviderTokensAvoided / estimatedBaselineEquivalentProviderTokens).toFixed(3)) : 0;
     return {
       directory: learningStore.directory,
       traces: traces.length,
@@ -232,12 +238,19 @@ export function createOpenWorldLearner({
         successRate: replayAttempts === 0 ? null : Number((successfulReplays / replayAttempts).toFixed(3)),
         activeRoutesWithReplays: replayTelemetry.filter(route => route.status === 'active' && route.successfulReplays > 0).length,
         estimatedFrontierStepsAvoided: replayTelemetry.reduce((total, route) => total + route.estimatedFrontierStepsAvoided, 0),
-        estimatedProviderTokensAvoided: Number(replayTelemetry
-          .reduce((total, route) => total + route.estimatedProviderTokensAvoided, 0).toFixed(3))
+        estimatedProviderTokensAvoided
+      },
+      economics: {
+        recordedProviderTokens: usage.totalTokens,
+        estimatedProviderTokensAvoided,
+        estimatedPairedProviderTokensSaved: estimatedProviderTokensAvoided,
+        estimatedBaselineEquivalentProviderTokens,
+        estimatedProviderTokenReduction,
+        successfulReplays
       },
       outcomes,
       resolutions,
-      usage: summarizeTraceUsage(traces)
+      usage
     };
   }
 

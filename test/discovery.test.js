@@ -72,6 +72,14 @@ test('open-world snapshot reports replay value and quarantined failures', async 
       estimatedFrontierStepsAvoided: 1,
       estimatedProviderTokensAvoided: 130
     });
+    assert.deepEqual(snapshot.economics, {
+      recordedProviderTokens: 260,
+      estimatedProviderTokensAvoided: 130,
+      estimatedPairedProviderTokensSaved: 130,
+      estimatedBaselineEquivalentProviderTokens: 390,
+      estimatedProviderTokenReduction: 0.333,
+      successfulReplays: 1
+    });
     assert.equal(snapshot.replayTelemetry[0].replaySuccessRate, 1);
     assert.deepEqual(snapshot.replayTelemetry[0].observedUsage, {
       usageRows: 2,

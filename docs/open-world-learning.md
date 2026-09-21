@@ -114,7 +114,12 @@ harness measure whether a promoted shortcut is actually earning reuse rather
 than merely accumulating observations. When the harness supplies numeric
 decision usage, the snapshot also reports observed input, output, and total
 tokens for the recorded frontier/Jev decisions, plus estimated provider tokens
-avoided by successful replays.
+avoided by successful replays. Its `economics` summary subtracts the recorded
+teaching/fallback usage from a paired-equivalent baseline: recorded work plus
+estimated replay work approximates what the same workload would have cost
+without learning. It reports paired-equivalent tokens saved and reduction.
+These are local estimates, not billing statements; use a paired harness trial
+when evaluator overhead or provider pricing must be isolated.
 
 No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the

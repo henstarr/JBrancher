@@ -211,6 +211,13 @@ reports observed input/output tokens and evaluator calls, and removes its
 temporary data afterward. It is a live usage benchmark, not an official
 SWE-bench resolution result.
 
+For a continuously running harness, read `GET /v1/learning` or
+`learner.snapshot()` and use its `economics` object. It reports recorded
+frontier/Jev tokens, estimated tokens avoided by successful replays, and a
+paired-equivalent token reduction. Keep the estimate separate from provider
+billing because it is derived from local trajectory observations; use a paired
+harness trial when evaluator overhead needs to be isolated.
+
 For a paired actor-cost comparison, provide the actor's measured average token
 usage and current rates explicitly. The command then reports baseline versus
 actual provider tokens and cost-per-run; without these flags it reports only
