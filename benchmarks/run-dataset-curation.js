@@ -47,12 +47,16 @@ try {
     raw.examples.filter((_, index) => index % 2 === 0),
     raw.examples.filter((_, index) => index % 2 === 1)
   ]);
+  const portableCuratedMerged = mergeDatasetExamples([
+    curated.examples.filter((_, index) => index % 2 === 0),
+    curated.examples.filter((_, index) => index % 2 === 1)
+  ]);
   const importedStore = createLocalLearningStore({ directory: join(directory, 'imported') });
-  const imported = await importDatasetExamples(importedStore, portableMerged, {
+  const imported = await importDatasetExamples(importedStore, portableCuratedMerged, {
     reviewed: true,
     source: 'shared-swebench-derived-dataset'
   });
-  const repeatedImport = await importDatasetExamples(importedStore, portableMerged, {
+  const repeatedImport = await importDatasetExamples(importedStore, portableCuratedMerged, {
     reviewed: true,
     source: 'shared-swebench-derived-dataset'
   });
@@ -77,6 +81,8 @@ try {
     evidenceObservations: curated.examples.reduce((total, example) => total + example.evidence.observations, 0),
     portableMergedExamples: portableMerged.length,
     portableMergeObservations: portableMerged.reduce((total, example) => total + example.evidence.observations, 0),
+    portableCuratedMergedExamples: portableCuratedMerged.length,
+    portableCuratedMergeObservations: portableCuratedMerged.reduce((total, example) => total + example.evidence.observations, 0),
     portableMergeNoExternalDatabase: true,
     importedTraces: imported.importedTraces,
     importedObservations: imported.importedObservations,
@@ -103,6 +109,8 @@ try {
     assert.equal(report.evidenceObservations, report.rawExamples);
     assert.equal(report.portableMergedExamples, report.curatedExamples);
     assert.equal(report.portableMergeObservations, report.rawExamples);
+    assert.equal(report.portableCuratedMergedExamples, report.curatedExamples);
+    assert.equal(report.portableCuratedMergeObservations, report.rawExamples);
     assert.equal(report.portableMergeNoExternalDatabase, true);
     assert.equal(report.importedTraces, report.rawExamples);
     assert.equal(report.importedObservations, report.rawExamples);

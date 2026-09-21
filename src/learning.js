@@ -1034,7 +1034,61 @@ export function mergeDatasetExamples(exampleSets = []) {
     }
     return redactValue(example, 0, 8);
   });
-  return deduplicateDataset(examples);
+  const mergeableExamples = examples.map(example => {
+    const { evidence, firstSeen, lastSeen, ...base } = example;
+    return base;
+  });
+  const merged = deduplicateDataset(mergeableExamples);
+  const aggregates = new Map();
+  const addCounts = (target, counts, fallback, amount) => {
+    const entries = counts && typeof counts === 'object' && !Array.isArray(counts)
+      ? Object.entries(counts).filter(([, count]) => Number.isSafeInteger(count) && count >= 0)
+      : [];
+    if (entries.length > 0) {
+      for (const [key, count] of entries) target[key] = (target[key] || 0) + count;
+    } else {
+      incrementCount(target, fallback);
+      if (amount > 1) target[fallback] += amount - 1;
+    }
+  };
+  for (const example of examples) {
+    const fingerprint = example.fingerprint;
+    const evidence = example.evidence && typeof example.evidence === 'object'
+      ? example.evidence : {};
+    const observations = Number.isSafeInteger(evidence.observations) && evidence.observations > 0
+      ? evidence.observations : 1;
+    const aggregate = aggregates.get(fingerprint) || {
+      observations: 0,
+      outcomes: {},
+      routeResolutions: {},
+      sources: new Set(),
+      firstSeen: null,
+      lastSeen: null
+    };
+    aggregate.observations += observations;
+    addCounts(aggregate.outcomes, evidence.outcomes, example.outcome, observations);
+    addCounts(aggregate.routeResolutions, evidence.routeResolutions, example.routeResolution, observations);
+    const sources = Array.isArray(evidence.sources) ? evidence.sources : (example.source ? [example.source] : []);
+    for (const source of sources) if (typeof source === 'string' && source) aggregate.sources.add(source);
+    const first = evidence.firstSeen || example.firstSeen || example.createdAt;
+    const last = evidence.lastSeen || example.lastSeen || example.createdAt;
+    if (first && (!aggregate.firstSeen || String(first) < aggregate.firstSeen)) aggregate.firstSeen = String(first);
+    if (last && (!aggregate.lastSeen || String(last) > aggregate.lastSeen)) aggregate.lastSeen = String(last);
+    aggregates.set(fingerprint, aggregate);
+  }
+  for (const example of merged) {
+    const aggregate = aggregates.get(example.fingerprint);
+    if (!aggregate) continue;
+    example.evidence = {
+      observations: aggregate.observations,
+      outcomes: aggregate.outcomes,
+      routeResolutions: aggregate.routeResolutions,
+      sources: [...aggregate.sources].sort()
+    };
+    example.firstSeen = aggregate.firstSeen;
+    example.lastSeen = aggregate.lastSeen;
+  }
+  return merged;
 }
 
 function outputPreview(value) {

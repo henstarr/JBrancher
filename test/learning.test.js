@@ -467,6 +467,28 @@ test('dataset exports merge locally without promoting imported routes', () => {
   assert.equal(merged[0].evidence.observations, 2);
   assert.deepEqual(merged[0].evidence.sources, ['machine-a', 'machine-b']);
   assert.doesNotMatch(JSON.stringify(merged), /apikey_should_not_persist/);
+  const third = traceToDatasetExample({
+    id: 'third',
+    task: 'inspect package.json',
+    source: 'machine-c',
+    outcome: 'success',
+    createdAt: '2026-09-20T00:02:00.000Z',
+    toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  const fourth = traceToDatasetExample({
+    id: 'fourth',
+    task: 'inspect package.json',
+    source: 'machine-d',
+    outcome: 'success',
+    createdAt: '2026-09-20T00:03:00.000Z',
+    toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  const [curatedA] = deduplicateDataset([first, second]);
+  const [curatedB] = deduplicateDataset([third, fourth]);
+  const mergedCurated = mergeDatasetExamples([[curatedA], [curatedB]]);
+  assert.equal(mergedCurated[0].evidence.observations, 4);
+  assert.deepEqual(mergedCurated[0].evidence.outcomes, { success: 4 });
+  assert.deepEqual(mergedCurated[0].evidence.sources, ['machine-a', 'machine-b', 'machine-c', 'machine-d']);
   assert.throws(() => mergeDatasetExamples([[{ task: 'missing fingerprint' }]]), /fingerprint/);
 });
 
