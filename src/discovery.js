@@ -167,6 +167,74 @@ export function createOpenWorldLearner({
     }
   }
 
+  /**
+   * Run one unknown request through a harness frontier actor while recording
+   * the complete episode. The frontier still owns execution; this helper only
+   * supplies lifecycle hooks and persists the redacted result.
+   *
+   * `outcome` may be a literal status or an async resolver receiving the
+   * frontier result. Returning the frontier result unchanged would make this
+   * helper convenient for adapters, so the saved episode is returned alongside
+   * it rather than being hidden in the local store.
+   */
+  async function runFrontier({
+    task,
+    frontier,
+    episodeCwd = cwd,
+    episodeSource = source,
+    routeResolution = 'unmatched',
+    metadata = {},
+    outcome,
+    finishMetadata = {}
+  } = {}) {
+    if (typeof frontier !== 'function') throw new TypeError('frontier must be a function');
+    if (outcome !== undefined && typeof outcome !== 'function'
+      && !['success', 'unknown', 'failure'].includes(outcome)
+      && outcome !== true && outcome !== false) {
+      throw new TypeError('outcome must be success, unknown, failure, true, false, or a function');
+    }
+    if (finishMetadata !== undefined && (typeof finishMetadata !== 'object' || finishMetadata === null
+      || Array.isArray(finishMetadata))) {
+      throw new TypeError('finishMetadata must be an object');
+    }
+
+    const episode = begin({ task, episodeCwd, episodeSource, routeResolution, metadata });
+    const recordContext = {
+      task,
+      episode,
+      recordToolCall: episode.recordToolCall,
+      recordToolResult: episode.recordToolResult,
+      setMetadata: episode.setMetadata
+    };
+
+    function normalizeOutcome(value) {
+      if (value === true) return 'success';
+      if (value === false) return 'unknown';
+      return ['success', 'unknown', 'failure'].includes(value) ? value : undefined;
+    }
+
+    try {
+      const result = await frontier(recordContext);
+      const resolvedOutcome = normalizeOutcome(typeof outcome === 'function'
+        ? await outcome({ result, episode })
+        : outcome);
+      const saved = await episode.finish({
+        ...(resolvedOutcome ? { outcome: resolvedOutcome } : {}),
+        metadata: finishMetadata
+      });
+      return { result, episode: saved };
+    } catch (error) {
+      await episode.finish({
+        outcome: 'failure',
+        metadata: {
+          ...finishMetadata,
+          error: error?.message ? String(error.message).slice(0, 500) : String(error).slice(0, 500)
+        }
+      }).catch(() => {});
+      throw error;
+    }
+  }
+
   async function snapshot() {
     const [traces, routes] = await Promise.all([
       typeof learningStore.readTraces === 'function' ? learningStore.readTraces() : [],
@@ -258,6 +326,7 @@ export function createOpenWorldLearner({
     store: learningStore,
     begin,
     recordEpisode,
+    runFrontier,
     learn,
     snapshot,
     activeEpisodeIds: () => [...episodes.keys()]

@@ -61,6 +61,36 @@ await learner.recordEpisode({
 `recordEpisode` performs the same redaction, durable append, dataset export,
 candidate mining, and optional promotion as the lower-level lifecycle API.
 
+For the smallest integration, let JBrancher own the episode lifecycle while
+your existing frontier callback keeps owning execution:
+
+```js
+const { result } = await learner.runFrontier({
+  task,
+  metadata: { candidateCount: 0 },
+  frontier: ({ recordToolCall, recordToolResult }) => frontier.run({
+    task,
+    onToolCall: call => recordToolCall({
+      toolCallId: call.id,
+      toolName: call.name,
+      input: call.input
+    }),
+    onToolResult: result => recordToolResult({
+      toolCallId: result.id,
+      isError: result.isError,
+      output: result.content
+    })
+  }),
+  outcome: ({ result }) => harness.isComplete(result)
+});
+```
+
+`runFrontier()` records failures and rethrows them to the harness, so adding
+learning does not swallow frontier errors. The returned `episode` is the
+redacted durable record; the returned `result` is the frontier's original
+result. This is the recommended boundary when adapting a harness whose actor
+already exposes tool lifecycle callbacks.
+
 The append-only trace file intentionally keeps every observation because
 repetition is evidence for promotion. For a portable training or evaluation
 export, curate repeated trajectories instead:

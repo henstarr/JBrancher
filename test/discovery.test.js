@@ -177,3 +177,51 @@ test('open-world learner ingests a completed frontier trajectory in one call', a
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('open-world learner wraps a frontier callback and records its outcome', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-frontier-wrapper-'));
+  try {
+    const learner = createOpenWorldLearner({ directory, source: 'wrapped-harness' });
+    const run = await learner.runFrontier({
+      task: 'inspect package.json',
+      metadata: { candidateCount: 0 },
+      frontier: async ({ recordToolCall, recordToolResult }) => {
+        recordToolCall({ toolCallId: 'inspect-1', toolName: 'read', input: { path: 'package.json' } });
+        recordToolResult({ toolCallId: 'inspect-1', output: 'package contents' });
+        return { completed: true };
+      },
+      outcome: ({ result }) => result.completed
+    });
+
+    assert.equal(run.result.completed, true);
+    assert.equal(run.episode.outcome, 'success');
+    assert.equal(run.episode.routeResolution, 'unmatched');
+    assert.equal((await learner.store.readTraces()).length, 1);
+    assert.equal((await learner.store.readRoutes()).length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('open-world frontier wrapper preserves failure evidence and rethrows', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-frontier-error-'));
+  try {
+    const learner = createOpenWorldLearner({ directory });
+    await assert.rejects(
+      learner.runFrontier({
+        task: 'inspect package.json',
+        frontier: async ({ recordToolCall }) => {
+          recordToolCall({ toolCallId: 'inspect-1', toolName: 'read', input: { path: 'package.json' } });
+          throw new Error('frontier unavailable');
+        }
+      }),
+      /frontier unavailable/
+    );
+    const [trace] = await learner.store.readTraces();
+    assert.equal(trace.outcome, 'failure');
+    assert.equal(trace.metadata.error, 'frontier unavailable');
+    assert.equal((await learner.store.readRoutes()).length, 0);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
