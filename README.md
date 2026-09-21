@@ -789,6 +789,23 @@ const event = await brancher.step({
 
 That is the drop-in boundary: your harness provides candidates and execution; JBrancher decides whether a bounded candidate is safe to try, and your existing actor remains the fallback. In an existing loop, wrap the call that currently chooses the next tool. Keep the harness's authorization, sandbox, observation, retry, and completion checks unchanged.
 
+Enable local continuous learning without constructing a store manually:
+
+```js
+const brancher = createJBrancher({
+  learningDirectory: '.jbrancher',
+  getCandidates,
+  actor,
+  execute
+});
+```
+
+For an open-world harness that cannot enumerate tools, omit `getCandidates` and
+provide `authorize({ action, state, task, history })`. The first successful
+frontier episodes are recorded locally, and repeated verified routes can be
+replayed after process restarts. `learningStore` remains available when a
+harness needs a custom local store or explicit lifecycle control.
+
 Rules are evaluated first. Jev can select only among candidates supplied by the harness. If the evaluator is uncertain or unavailable, the actor receives the step. Deterministic execution permissions remain in the harness.
 
 ## Jev connection

@@ -19,6 +19,27 @@ test('rules run before evaluation and actor fallback', async () => {
   assert.deepEqual(calls, []);
 });
 
+test('generic brancher can create its local learning store from a directory', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-directory-'));
+  try {
+    const action = { tool: 'read', args: { path: 'README.md' } };
+    const brancher = createJBrancher({
+      learningDirectory: directory,
+      authorize: async ({ action: candidate }) => JSON.stringify(candidate) === JSON.stringify(action),
+      actor: async () => ({ action }),
+      execute: async () => ({ ok: true }),
+      learningOutcome: () => true
+    });
+    await brancher.step({ task: 'read README.md', state: {} });
+    await brancher.step({ task: 'read README.md', state: {} });
+    const store = createLocalLearningStore({ directory });
+    assert.equal((await store.readRoutes()).some(route => route.status === 'active'), true);
+    assert.equal(brancher.metadata.learningDirectory, directory);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('Jev selects only a supplied candidate when probability and margin pass', async () => {
   const brancher = createJBrancher({
     getCandidates: async () => [{ tool: 'write', args: { value: 8 } }, { tool: 'verify', args: {} }],

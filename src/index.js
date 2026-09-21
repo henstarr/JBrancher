@@ -1,4 +1,4 @@
-import { createEpisodeRecorder, findLearnedActions, findLearnedWorkflows, refreshAndPromoteReadOnly } from './learning.js';
+import { createEpisodeRecorder, createLocalLearningStore, findLearnedActions, findLearnedWorkflows, refreshAndPromoteReadOnly } from './learning.js';
 
 const clone = value => structuredClone(value);
 
@@ -55,7 +55,8 @@ export function createJBrancher({
   minimumMargin = 0.15,
   maxSteps = 12,
   onEvent = () => {},
-  learningStore,
+  learningStore: suppliedLearningStore,
+  learningDirectory,
   learningSource = 'harness',
   learningCwd = '',
   learningOnlyFallback = true,
@@ -79,9 +80,17 @@ export function createJBrancher({
     throw new TypeError('Invalid evaluator thresholds');
   }
   if (!Number.isSafeInteger(maxSteps) || maxSteps < 1) throw new TypeError('maxSteps must be a positive integer');
-  if (learningStore !== undefined && (!learningStore || typeof learningStore.appendTrace !== 'function')) {
+  if (suppliedLearningStore !== undefined && (!suppliedLearningStore || typeof suppliedLearningStore.appendTrace !== 'function')) {
     throw new TypeError('learningStore must expose appendTrace()');
   }
+  if (learningDirectory !== undefined && (typeof learningDirectory !== 'string' || !learningDirectory.trim())) {
+    throw new TypeError('learningDirectory must be a non-empty string');
+  }
+  if (suppliedLearningStore !== undefined && learningDirectory !== undefined) {
+    throw new TypeError('Pass learningStore or learningDirectory, not both');
+  }
+  const learningStore = suppliedLearningStore
+    ?? (learningDirectory === undefined ? undefined : createLocalLearningStore({ directory: learningDirectory }));
   if (typeof learningSource !== 'string' || typeof learningCwd !== 'string') {
     throw new TypeError('learningSource and learningCwd must be strings');
   }
@@ -540,7 +549,8 @@ export function createJBrancher({
   return { decide, step, run, metadata: {
     minimumProbability, minimumMargin, maxSteps, ruleCount: rules.length,
     authorization: Boolean(authorize),
-    learning: Boolean(learningStore), learningAutoPromote, learningOnlyFallback,
+    learning: Boolean(learningStore), learningDirectory: learningDirectory ?? null,
+    learningAutoPromote, learningOnlyFallback,
     learningRecordEmptyEpisodes,
     learningMinimumObservations, learningCandidateMinimumObservations, learningPromotionMode,
     learningOutcomeValidation: Boolean(learningOutcome)

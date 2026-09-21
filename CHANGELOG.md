@@ -13,6 +13,8 @@
   and optional persistent local learning state.
 - Strengthen the restart benchmark to learn and replay an unregistered route
   through dynamic authorization without enumerating candidates.
+- Add a `learningDirectory` shortcut so generic harnesses can opt into the local
+  learning store without constructing one manually.
 
 ## 0.1.0 - 2026-09-17
 
