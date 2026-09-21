@@ -265,6 +265,36 @@ test('generic runtime replays an open-world route through authorization without 
   }
 });
 
+test('generic runtime abandons a learned route when dynamic authorization is revoked', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-authorize-revoked-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const action = { tool: 'inspect', args: { target: 'runtime' } };
+    let actorCalls = 0;
+    const makeBrancher = authorized => createJBrancher({
+      getCandidates: async () => [],
+      authorize: async () => authorized,
+      actor: async () => {
+        actorCalls++;
+        return { action };
+      },
+      execute: async () => 'inspected',
+      learningStore: store,
+      learningPromotionMode: 'verified',
+      learningOutcome: () => true
+    });
+
+    await makeBrancher(true).step({ task: 'Inspect the runtime' });
+    await makeBrancher(true).step({ task: 'Inspect the runtime' });
+    const revoked = await makeBrancher(false).step({ task: 'Inspect the runtime' });
+
+    assert.equal(revoked.decision.source, 'actor');
+    assert.equal(actorCalls, 3);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('generic runtime exposes a first fallback as a candidate without activating it', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'jbrancher-runtime-candidate-'));
   try {
