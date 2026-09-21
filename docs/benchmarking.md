@@ -362,12 +362,13 @@ JBrancher's local `POST /v1/decide` endpoint when it has a bounded candidate
 set, execute the selected action in Harbor's environment, and post the
 completed open-world trajectory to `POST /v1/episodes`. That makes unknown
 routes learnable without making the benchmark harness depend on a JavaScript
-runtime. JBrancher ships a dependency-free Python proxy client and an async
-`JBrancherHarborLoop`, but does not replace Harbor's `BaseAgent` class. The
-loop accepts the host's frontier callback, environment executor, and optional
-postcondition verifier, so a small `BaseAgent.run()` method can use it without
-adding a Harbor dependency to this package. This bridge is not an assertion
-that Harbor has already been run in this repository.
+runtime. JBrancher ships a dependency-free Python proxy client, an async
+`JBrancherHarborLoop`, and an optional `JBrancherHarborAgent` base class. When
+Harbor is installed, the latter implements the current `BaseAgent` boundary;
+when Harbor is absent, the module remains importable for local adapter tests.
+The class accepts the frontier callback, environment executor, and optional
+postcondition verifier through overridable hooks. This bridge is not an
+assertion that Harbor has already been run in this repository.
 
 When a task has no registered candidate set, the adapter may omit `candidates`
 or send `[]`. The proxy returns a safe `abstain/unmatched` decision; the
@@ -394,6 +395,29 @@ result = await loop.step(
     verify=postcondition_verifier,
 )
 ```
+
+Minimal direct `BaseAgent` shape:
+
+```python
+from integrations.python import JBrancherHarborAgent
+
+class MyAgent(JBrancherHarborAgent):
+    async def frontier_action(self, instruction, state, decision, environment, context):
+        return await frontier_model(instruction, state, decision)
+
+    async def candidate_actions(self, instruction, state, history, environment, context):
+        return await authorized_actions(environment, state)
+```
+
+Run the local proxy in the same reachable environment first:
+
+```sh
+npx jbrancher proxy --learning-dir .jbrancher
+```
+
+Then pass `JBRANCHER_PROXY_URL` if Harbor runs the agent in a separate
+container. The adapter records each completed frontier workflow locally and
+replays a route only when the current action catalog authorizes it.
 
 Use `loop.run(...)` when the harness wants one complete multi-step episode in
 the local dataset; pass `candidate_steps` for workflow replay and `observe` to

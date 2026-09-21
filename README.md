@@ -579,6 +579,30 @@ The helper is Harbor-compatible but does not import Harbor, so it remains
 usable in any Python harness and is straightforward to call from Harbor's
 `BaseAgent.run()` method.
 
+For a direct Harbor custom-agent base class, import
+`JBrancherHarborAgent`. Harbor is optional at import time; when installed, the
+class implements the current `BaseAgent` boundary and reports a compact
+JBrancher summary through `AgentContext.metadata`:
+
+```python
+from integrations.python import JBrancherHarborAgent
+
+class MyAgent(JBrancherHarborAgent):
+    async def frontier_action(self, instruction, state, decision, environment, context):
+        # Call the existing frontier model here and return one action mapping.
+        return await my_frontier_model(instruction, state, decision)
+
+    async def candidate_actions(self, instruction, state, history, environment, context):
+        # Return only actions currently authorized by the environment/policy.
+        return await authorized_actions(environment, state)
+```
+
+Start the local learning proxy and point Harbor at it with
+`JBRANCHER_PROXY_URL` (the default is `http://127.0.0.1:8787`), then run the
+custom class with Harbor's normal `--agent module:Class` option. The adapter
+does not replace the frontier model or verifier; it inserts local replay and
+episode capture at the `BaseAgent.run()` boundary.
+
 For multi-step workflows, `JBrancherHarborLoop.run()` records the entire
 frontier trajectory as one dataset example and can replay an authorized local
 workflow:
