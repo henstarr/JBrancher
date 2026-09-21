@@ -25,6 +25,7 @@ npm run bench:proxy -- --assert
 npm run bench:workflow -- --assert
 npm run bench:harbor -- --assert
 npm run bench:adaptation -- --assert
+npm run bench:authorization -- --assert
 npm run bench:dataset -- --assert
 npm run bench:persistence -- --assert
 npm run bench:verified-patch -- --assert
@@ -64,6 +65,15 @@ runner performs the same validation before attempting Docker or Modal.
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
+
+The dynamic-authorization benchmark measures the same cold-to-warm loop when a
+harness cannot enumerate its complete tool catalog. It omits `getCandidates`
+and uses only `authorize`, then revokes one learned action to verify that the
+frontier fallback remains available. The latest 14-instance run reduced
+frontier calls from 56 to 4 with 100% route coverage and is documented in
+[docs/dynamic-authorization-2026-09-21.md](dynamic-authorization-2026-09-21.md).
+It is a SWE-bench-derived learning benchmark, not an official patch-resolution
+score.
 
 The dataset curation benchmark measures a separate property: repeated local
 episodes remain available as evidence, while the portable export collapses

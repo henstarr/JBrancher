@@ -30,6 +30,7 @@
     "bench:tokens": "node benchmarks/run-token-optimization.js",
     "bench:learning": "node benchmarks/run-learning.js",
     "bench:discovery": "node benchmarks/run-discovery.js",
+    "bench:authorization": "node benchmarks/run-dynamic-authorization.js",
     "bench:template-learning": "node benchmarks/run-template-learning.js",
     "bench:template-workflow-learning": "node benchmarks/run-template-workflow-learning.js",
     "bench:dataset": "node benchmarks/run-dataset-curation.js",

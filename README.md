@@ -910,6 +910,21 @@ the replacement workflow, records the new evidence, and replays the new route
 after it earns enough observations. The current 14-task run preserves 100%
 success while reducing frontier steps by 33.3%.
 
+To benchmark open-world learning when the harness cannot enumerate its tools,
+run:
+
+```sh
+npm run bench:authorization -- --assert
+```
+
+This uses the SWE-bench-derived fixture, omits `getCandidates`, and authorizes
+learned actions through a dynamic callback. The latest 14-instance run reduced
+frontier calls from 56 to 4 (92.9%), replayed 52 actions locally with 100%
+route coverage, and correctly fell back once when authorization was revoked.
+The result uses synthetic actor-token assumptions and is not an official
+SWE-bench patch-resolution score; see
+[docs/dynamic-authorization-2026-09-21.md](docs/dynamic-authorization-2026-09-21.md).
+
 For the live Pi route-choice benchmark, calibrate thresholds explicitly and
 keep assertions enabled:
 
