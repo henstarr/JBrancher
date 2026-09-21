@@ -33,6 +33,7 @@
     "bench:proxy": "node benchmarks/run-proxy-learning.js",
     "bench:workflow": "node benchmarks/run-workflow-proxy.js",
     "bench:harbor": "node benchmarks/run-harbor-style.js",
+    "bench:adaptation": "node benchmarks/run-adaptive-drift.js",
     "bench:live-learning": "node benchmarks/run-live-learning.js",
     "bench:live-codex": "node benchmarks/run-live-codex-learning.js",
     "bench:live-codex-proxy": "node benchmarks/run-live-codex-proxy-learning.js",

@@ -34,7 +34,7 @@ async function proxy() {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Invalid --port');
   const service = createJBrancherServer({
     apiKey: process.env.TYPESAFE_API_KEY,
-    model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
+    model: process.env.JBRANCHER_MODEL ?? 'jev-latest',
     timeoutMs: Number(process.env.JBRANCHER_TIMEOUT_MS ?? 5000),
     learningDirectory,
     learningAllowVerified
@@ -54,9 +54,10 @@ async function liveCheck() {
   if (!process.env.TYPESAFE_API_KEY) {
     throw new Error('TYPESAFE_API_KEY is not configured. Put it in .env or the process environment.');
   }
+  const model = process.env.JBRANCHER_MODEL ?? 'jev-latest';
   const evaluate = createJevEvaluator({
     apiKey: process.env.TYPESAFE_API_KEY,
-    model: 'jev-1.13.0',
+    model,
     timeoutMs: 10_000
   });
   const cases = [
@@ -75,7 +76,7 @@ async function liveCheck() {
     rows.push({ id: item.id, source: event.decision.source, action: event.decision.action,
       scores: event.decision.evaluation?.scores ?? null, usage: event.decision.evaluation?.usage ?? [] });
   }
-  console.log(JSON.stringify({ model: 'jev-1.13.0', cases: rows }, null, 2));
+  console.log(JSON.stringify({ model, cases: rows }, null, 2));
 }
 
 async function learn() {

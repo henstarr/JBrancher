@@ -745,6 +745,18 @@ coverage. It is a bridge benchmark rather than an official Terminal-Bench
 score; the same loop can be placed inside a real Harbor `BaseAgent` once its
 environment executor and verifier are supplied.
 
+To verify that learning adapts when the harness's capabilities change, run:
+
+```sh
+npm run bench:adaptation -- --assert
+```
+
+The drift benchmark changes a task's available action catalog after the first
+workflow is learned. JBrancher abstains safely, lets the frontier model handle
+the replacement workflow, records the new evidence, and replays the new route
+after it earns enough observations. The current 14-task run preserves 100%
+success while reducing frontier steps by 33.3%.
+
 For the live Pi route-choice benchmark, calibrate thresholds explicitly and
 keep assertions enabled:
 

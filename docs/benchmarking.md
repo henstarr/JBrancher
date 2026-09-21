@@ -24,6 +24,7 @@ npm run bench:learning -- --assert
 npm run bench:proxy -- --assert
 npm run bench:workflow -- --assert
 npm run bench:harbor -- --assert
+npm run bench:adaptation -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
@@ -135,6 +136,20 @@ workflows, and reduces frontier steps from 112 to 56 with 100% success and
 route coverage. It is a deterministic bridge/regression benchmark, not an
 official Harbor or Terminal-Bench score; run the real Harbor agent against
 Terminal-Bench after the adapter is connected to its environment and oracle.
+
+To test continuous improvement under capability drift, run:
+
+```sh
+npm run bench:adaptation -- --assert
+```
+
+This benchmark learns a two-step read workflow, changes the host's available
+action catalog, verifies that the old workflow abstains instead of executing,
+records two frontier recoveries, and then verifies that the replacement route
+replays. The current 14-task run records 84 episodes, performs 28 safe drift
+abstentions, maintains 100% success, and reduces frontier steps from 168 to
+112 (33.3%) while learning 28 active routes. It is still a deterministic
+adaptation benchmark, not an official patch-resolution score.
 
 To measure actual Jev overhead and savings on the same learning path, configure
 `TYPESAFE_API_KEY` in the ignored `.env` and run:

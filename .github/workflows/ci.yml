@@ -34,6 +34,7 @@ jobs:
       - run: npm run bench:proxy -- --assert
       - run: npm run bench:workflow -- --assert
       - run: npm run bench:harbor -- --assert
+      - run: npm run bench:adaptation -- --assert
 
   provenance:
     name: SWE-bench provenance

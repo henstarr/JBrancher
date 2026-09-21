@@ -161,7 +161,7 @@ try {
   const allAttemptsSuccessful = rows.every(row => row.attempts.every(attempt => attempt.correct));
   console.log(JSON.stringify({
     benchmark: 'JBrancher live Jev route-learning benchmark',
-    model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
+    model: process.env.JBRANCHER_MODEL ?? 'jev-latest',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
     caveat: 'Live TypeSafe usage measurement with deterministic read execution; not an official SWE-bench patch-resolution score.',
     baselineJevCalls: baselineCalls,

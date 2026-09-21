@@ -120,7 +120,7 @@ try {
   const averageOutputTokens = evaluatorCalls > 0 ? usage.outputTokens / evaluatorCalls : 0;
   const report = {
     benchmark: 'JBrancher live Pi preference-learning benchmark',
-    model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
+    model: process.env.JBRANCHER_MODEL ?? 'jev-latest',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
     thresholds: { minimumProbability, minimumMargin },
     caveat: 'Live TypeSafe Pi-router measurement with deterministic route verifiers; not an official SWE-bench patch-resolution score.',
