@@ -26,7 +26,13 @@ npm run bench:workflow -- --assert
 npm run bench:harbor -- --assert
 npm run bench:adaptation -- --assert
 npm run bench:dataset -- --assert
+npm run bench:package -- --assert
 ```
+
+`bench:package` packs the repository, installs that tarball into a clean
+temporary prefix, imports the public package entry point, and runs the installed
+CLI demo. It is the fastest check that a user can install JBrancher without
+depending on the repository checkout.
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
