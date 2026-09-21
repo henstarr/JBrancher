@@ -181,6 +181,7 @@ async function runJBrancher({ instance, repetitions, cwd, learningDirectory, exe
 
 const instanceCount = numericFlag('--instances', 1, { min: 1, max: fixture.instances.length });
 const repetitions = numericFlag('--repetitions', 3, { min: 3, max: 6 });
+const shouldAssert = process.argv.includes('--assert');
 const inputRate = optionalNumberFlag('--actor-input-rate');
 const outputRate = optionalNumberFlag('--actor-output-rate');
 if ((inputRate === null) !== (outputRate === null)) throw new Error('Pass both actor rates or neither.');
@@ -209,7 +210,7 @@ try {
   const learnedActorCalls = rows.reduce((total, row) => total + row.learned.actorCalls, 0);
   const baselineCost = estimateCost(baselineUsage, inputRate, outputRate);
   const learnedCost = estimateCost(learnedUsage, inputRate, outputRate);
-  console.log(JSON.stringify({
+  const report = {
     benchmark: 'JBrancher live Codex actor-learning benchmark',
     actor: executable,
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
@@ -228,7 +229,14 @@ try {
     taskSuccessPreserved: rows.every(row => row.learned.attempts.every(attempt => attempt.correct)),
     learnedRouteCoverage: rows.every(row => row.learnedRouteCoverage),
     rows
-  }, null, 2));
+  };
+  if (shouldAssert) {
+    if (!report.taskSuccessPreserved) throw new Error('Live Codex task success was not preserved');
+    if (!report.learnedRouteCoverage) throw new Error('Live Codex learned-route coverage was incomplete');
+    if (report.learnedActorCalls >= report.baselineActorCalls) throw new Error('Live Codex did not avoid actor calls');
+    if (report.providerTokensSaved <= 0) throw new Error('Live Codex did not save provider tokens');
+  }
+  console.log(JSON.stringify(report, null, 2));
 } finally {
   await rm(root, { recursive: true, force: true });
 }

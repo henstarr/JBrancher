@@ -266,6 +266,8 @@ This runs the same SWE-bench-derived decision prompt against Codex for the
 actor-only arm and for JBrancher warm-up attempts. Later attempts use the
 project-local learned route. Codex usage is observed from its JSON event stream;
 pass `--actor-input-rate` and `--actor-output-rate` to add a cost estimate.
+Add `--assert` to fail the run if success, learned-route coverage, or token
+savings regress.
 The benchmark never grants write access to the repository and removes its
 temporary learning store after the run.
 The one-task pilot is in [docs/live-codex-2026-09-20.md](live-codex-2026-09-20.md),
@@ -273,7 +275,7 @@ and the larger three-task sample is in
 [docs/live-codex-3tasks-2026-09-20.md](live-codex-3tasks-2026-09-20.md).
 The latest one-task run with the current learner is in
 [docs/live-codex-2026-09-21.md](live-codex-2026-09-21.md); it preserved 100%
-fixture success while saving 15,953 observed Codex provider tokens.
+fixture success while saving 15,977 observed Codex provider tokens.
 
 To measure live frontier usage for the parameterized action-template learner:
 
