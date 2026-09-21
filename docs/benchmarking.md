@@ -27,6 +27,7 @@ npm run bench:harbor -- --assert
 npm run bench:adaptation -- --assert
 npm run bench:dataset -- --assert
 npm run bench:persistence -- --assert
+npm run bench:verified-patch -- --assert
 npm run bench:package -- --assert
 ```
 
@@ -39,6 +40,12 @@ depending on the repository checkout.
 local learning directory. It verifies that two successful frontier episodes
 survive process boundaries and that the third process replays the learned route
 without calling the frontier actor or an external database.
+
+`bench:verified-patch` exercises side effects against a real temporary project:
+the frontier fixture writes a bug fix and runs a focused test, then JBrancher
+replays the multi-step workflow in fresh workspaces only after the verifier has
+approved two successful observations. It measures verified write-workflow
+reuse; it is not an official SWE-bench patch-resolution score.
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.

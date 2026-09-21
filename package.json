@@ -32,6 +32,7 @@
     "bench:discovery": "node benchmarks/run-discovery.js",
     "bench:dataset": "node benchmarks/run-dataset-curation.js",
     "bench:persistence": "node benchmarks/run-persistence.js",
+    "bench:verified-patch": "node benchmarks/run-verified-patch.js",
     "bench:proxy": "node benchmarks/run-proxy-learning.js",
     "bench:workflow": "node benchmarks/run-workflow-proxy.js",
     "bench:harbor": "node benchmarks/run-harbor-style.js",

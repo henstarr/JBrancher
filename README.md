@@ -264,6 +264,16 @@ It runs three separate processes against one temporary `.jbrancher` directory
 and verifies the progression `frontier → frontier → learned` with zero
 external-database dependency.
 
+To exercise verified side effects against a real temporary project:
+
+```sh
+npm run bench:verified-patch -- --assert
+```
+
+This writes a small bug fix, runs its focused test, and then replays the
+verified multi-step workflow in fresh workspaces. Writes are only reused after
+the postcondition verifier passes twice.
+
 For a generic harness or offline inspection, export the same local dataset
 without changing route status:
 
@@ -741,6 +751,7 @@ npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
 npm run bench:proxy -- --assert
 npm run bench:persistence -- --assert
+npm run bench:verified-patch -- --assert
 ```
 
 It compares actor-only, rules-plus-actor, and rules-plus-Jev-plus-actor on a fixed fixture. This measures decision accuracy, actor calls avoided, fallback coverage, and evaluator calls without making paid requests. It is a wiring and regression benchmark, not evidence that Jev improves every task.
