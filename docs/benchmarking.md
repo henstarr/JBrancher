@@ -22,6 +22,7 @@ npm run bench:cost -- --assert
 npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
 npm run bench:proxy -- --assert
+npm run bench:workflow -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
@@ -103,6 +104,17 @@ route coverage, zero evaluator calls on replay, and a positive frontier-call
 reduction. The first two attempts now call `/v1/decide` without candidates and
 assert `abstain/unmatched` before recording the frontier trajectory. It is a local transport/learning benchmark—not an official
 SWE-bench patch-resolution result.
+
+The multi-step workflow benchmark exercises the complete trajectory boundary
+and the `/v1/workflow` replay endpoint:
+
+```sh
+npm run bench:workflow -- --assert
+```
+
+The latest run promoted 14 two-step workflows, replayed 28 of 56 total
+attempts, and reduced synthetic actor steps from 112 to 56 with 100% route
+coverage. See [docs/workflow-proxy-2026-09-21.md](workflow-proxy-2026-09-21.md).
 
 To measure actual Jev overhead and savings on the same learning path, configure
 `TYPESAFE_API_KEY` in the ignored `.env` and run:
@@ -319,6 +331,11 @@ or send `[]`. The proxy returns a safe `abstain/unmatched` decision; the
 frontier actor remains owned by the harness, and its completed tool trajectory
 becomes the next local dataset example.
 
+For workflows with multiple actions, send the host's per-step capability
+catalog to `POST /v1/workflow`. It returns a learned workflow only when every
+step remains authorized. Otherwise it abstains and the harness should execute
+the frontier path, then submit the complete trajectory to `/v1/episodes`.
+
 Minimal loop shape inside a Harbor agent:
 
 ```python
@@ -334,6 +351,10 @@ result = await loop.step(
     verify=postcondition_verifier,
 )
 ```
+
+Use `loop.run(...)` when the harness wants one complete multi-step episode in
+the local dataset; pass `candidate_steps` for workflow replay and `observe` to
+return the post-action state for each step.
 
 For learned decisions, include the returned `routeId` in the completion
 episode. A successful completion increments the local route's replay counter;

@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
-import { createJBrancher } from './index.js';
+import { createJBrancher, sameAction } from './index.js';
 import { createJevEvaluator } from './jev.js';
 import { createOpenWorldLearner } from './discovery.js';
+import { findLearnedWorkflows } from './learning.js';
 
 const MAX_BODY_BYTES = 1_000_000;
 
@@ -82,6 +83,7 @@ export function createJBrancherServer({
     decisionsTotal: 0,
     episodesRecorded: 0,
     evaluatorCalls: 0,
+    workflowRequests: 0,
     unavailable: 0,
     errors: 0,
     learningErrors: 0,
@@ -182,6 +184,44 @@ export function createJBrancherServer({
           stats.learningErrors += 1;
           throw error;
         }
+      }
+      if (request.method === 'POST' && url.pathname === '/v1/workflow') {
+        if (!learner) return sendJson(response, 404, { error: 'Learning is not configured' });
+        const input = await readJson(request);
+        if (typeof input.task !== 'string' || !input.task.trim()) {
+          return sendJson(response, 400, { error: 'task must be a non-empty string' });
+        }
+        if (!Array.isArray(input.candidateSteps) || input.candidateSteps.some(step => !Array.isArray(step))) {
+          return sendJson(response, 400, { error: 'candidateSteps must be an array of candidate arrays' });
+        }
+        const maxSteps = Number.isSafeInteger(input.maxSteps) && input.maxSteps > 0 ? input.maxSteps : 12;
+        if (maxSteps > 100) return sendJson(response, 400, { error: 'maxSteps must be <= 100' });
+        const workflows = await findLearnedWorkflows(await learner.store.readRoutes(), input.task, {
+          allowVerified: learningAllowVerified
+        });
+        const matches = workflows.filter(workflow => workflow.actions.length <= maxSteps
+          && workflow.actions.every((action, index) => input.candidateSteps[index]
+            .some(candidate => sameAction(candidate, action))));
+        stats.requestsTotal += 1;
+        stats.workflowRequests += 1;
+        if (matches.length !== 1) {
+          return sendJson(response, 200, {
+            source: 'abstain',
+            action: null,
+            actions: [],
+            routeResolution: matches.length > 1 ? 'ambiguous' : 'unmatched',
+            workflowCandidates: matches.map(workflow => ({ id: workflow.id, stepCount: workflow.actions.length })),
+            reason: matches.length > 1 ? 'More than one learned workflow was authorized' : 'No learned workflow was authorized'
+          });
+        }
+        return sendJson(response, 200, {
+          source: 'learned',
+          routeId: matches[0].id,
+          actions: matches[0].actions,
+          routeResolution: 'learned',
+          usage: [],
+          reason: 'A proven local workflow matched'
+        });
       }
       if (request.method !== 'POST' || url.pathname !== '/v1/decide') {
         return sendJson(response, 404, { error: 'Not found' });

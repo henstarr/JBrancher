@@ -6,6 +6,8 @@
   preventing a learned choice from crossing project or mode boundaries.
 - Keep route evidence cumulative across refreshes without reviving quarantined
   routes.
+- Add a bounded `/v1/workflow` endpoint and Python/Harbor `run()` helper for
+  capturing and replaying authorized multi-step local workflows.
 
 ## 0.1.0 - 2026-09-17
 

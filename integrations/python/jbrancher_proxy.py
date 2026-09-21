@@ -95,6 +95,40 @@ class JBrancherProxy:
             },
         )
 
+    def workflow(
+        self,
+        task: str,
+        state: Any,
+        candidate_steps: Sequence[Sequence[Any]],
+        history: Sequence[Any] | None = None,
+        max_steps: int = 12,
+    ) -> dict[str, Any]:
+        """Return one authorized learned workflow, or a safe abstention.
+
+        ``candidate_steps`` is the host's current capability catalog for each
+        step. JBrancher can only return a workflow when every learned action is
+        still present in that catalog; it never executes or invents actions.
+        """
+
+        if not isinstance(task, str) or not task.strip():
+            raise ValueError("task must be a non-empty string")
+        if not isinstance(candidate_steps, (list, tuple)) or any(
+            not isinstance(step, (list, tuple)) for step in candidate_steps
+        ):
+            raise ValueError("candidate_steps must be a sequence of candidate sequences")
+        if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1 or max_steps > 100:
+            raise ValueError("max_steps must be an integer from 1 to 100")
+        return self._request(
+            "/v1/workflow",
+            {
+                "task": task,
+                "state": state,
+                "history": list(history or []),
+                "candidateSteps": [list(step) for step in candidate_steps],
+                "maxSteps": max_steps,
+            },
+        )
+
     def record_episode(
         self,
         task: str,

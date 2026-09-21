@@ -223,6 +223,7 @@ benchmark with:
 
 ```sh
 npm run bench:learning
+npm run bench:workflow -- --assert
 ```
 
 The benchmark uses real SWE-bench problem statements to measure routing reuse;
@@ -447,6 +448,25 @@ curl http://127.0.0.1:8787/v1/decide \
 
 The proxy exposes `GET /health`, `GET /stats`, and (when `--learning-dir` is supplied) `GET /v1/learning`. It is a decision proxy, not a transparent OpenAI/Anthropic replacement: the caller must supply the actions that are legal in the current harness state. This is what keeps JBrancher bounded and prevents it from inventing executable work.
 
+For a previously learned multi-step workflow, use `POST /v1/workflow` with a
+per-step capability catalog. The service returns a workflow only when every
+learned action is still authorized by the host:
+
+```json
+{
+  "task": "Inspect package.json and then read README.md",
+  "state": {"phase": 0},
+  "candidateSteps": [
+    [{"tool": "read", "args": {"path": "package.json"}}],
+    [{"tool": "read", "args": {"path": "README.md"}}]
+  ]
+}
+```
+
+An unmatched or unauthorized workflow returns `source: "abstain"`; the
+harness should use its frontier actor and submit the complete trajectory to
+`/v1/episodes`.
+
 For genuinely open-world work, omit `candidates` or send an empty array. The
 proxy returns `source: "abstain"` and `routeResolution: "unmatched"`; the
 harness should then call its frontier actor, execute and verify the result, and
@@ -552,6 +572,22 @@ step = await loop.step(
 The helper is Harbor-compatible but does not import Harbor, so it remains
 usable in any Python harness and is straightforward to call from Harbor's
 `BaseAgent.run()` method.
+
+For multi-step workflows, `JBrancherHarborLoop.run()` records the entire
+frontier trajectory as one dataset example and can replay an authorized local
+workflow:
+
+```python
+result = await loop.run(
+    instruction,
+    state,
+    candidate_steps=legal_candidates_by_step,
+    frontier=frontier_actor,
+    execute=execute_in_environment,
+    observe=observe_state,
+    verify=verify_postcondition,
+)
+```
 
 Each recorded tool call includes the current state and compact routing metadata
 (`source`, `routeResolution`, candidate count, and route ID when present), so

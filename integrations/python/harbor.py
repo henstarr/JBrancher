@@ -108,6 +108,19 @@ class JBrancherStepResult:
     recovered: bool = False
 
 
+@dataclass(frozen=True)
+class JBrancherRunResult:
+    """A completed multi-step workflow and its local learning feedback."""
+
+    events: list[dict[str, Any]]
+    state: Any
+    history: list[Any]
+    source: str
+    outcome: str
+    episode: dict[str, Any] | None
+    recovered: bool = False
+
+
 class JBrancherHarborLoop:
     """Run one safe JBrancher step inside a Harbor-style agent.
 
@@ -147,6 +160,34 @@ class JBrancherHarborLoop:
         context: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         calls = [] if action is None else [_tool_call(action, result, outcome == "success", context)]
+        return await asyncio.to_thread(
+            self.proxy.record_episode,
+            task,
+            calls,
+            outcome,
+            cwd=self.cwd,
+            source=self.source,
+            route_resolution=route_resolution,
+            route_id=route_id,
+            metadata=metadata,
+            finish_metadata=finish_metadata,
+            failure_reason=failure_reason,
+        )
+
+    async def _record_trajectory(
+        self,
+        *,
+        task: str,
+        calls: Sequence[Mapping[str, Any]],
+        outcome: str,
+        route_resolution: str,
+        route_id: str | None = None,
+        metadata: Mapping[str, Any] | None = None,
+        finish_metadata: Mapping[str, Any] | None = None,
+        failure_reason: str | None = None,
+    ) -> dict[str, Any]:
+        """Persist one complete frontier trajectory as one local dataset row."""
+
         return await asyncio.to_thread(
             self.proxy.record_episode,
             task,
@@ -260,5 +301,236 @@ class JBrancherHarborLoop:
             recovered=True,
         )
 
+    async def run(
+        self,
+        task: str,
+        state: Any,
+        *,
+        frontier: Callback,
+        execute: Callback,
+        candidates: Sequence[Any] | None = None,
+        candidate_steps: Sequence[Sequence[Any]] | None = None,
+        candidate_provider: Callback | None = None,
+        history: Sequence[Any] | None = None,
+        observe: Callback | None = None,
+        verify: Callback | None = None,
+        max_steps: int = 12,
+        metadata: Mapping[str, Any] | None = None,
+        finish_metadata: Mapping[str, Any] | None = None,
+    ) -> JBrancherRunResult:
+        """Run and record a complete workflow, with optional local replay.
 
-__all__ = ["JBrancherHarborLoop", "JBrancherStepResult"]
+        ``candidate_steps`` enables a bounded multi-step learned-workflow
+        lookup. Every learned action must still appear in the host's current
+        per-step capability catalog. If no workflow matches, each step falls
+        back to the supplied frontier actor and the entire successful
+        trajectory is recorded as one dataset example.
+        """
+
+        if not isinstance(task, str) or not task.strip():
+            raise ValueError("task must be a non-empty string")
+        if not callable(frontier) or not callable(execute):
+            raise TypeError("frontier and execute callbacks are required")
+        if verify is not None and not callable(verify):
+            raise TypeError("verify must be callable when provided")
+        if observe is not None and not callable(observe):
+            raise TypeError("observe must be callable when provided")
+        if candidate_provider is not None and not callable(candidate_provider):
+            raise TypeError("candidate_provider must be callable when provided")
+        if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1 or max_steps > 100:
+            raise ValueError("max_steps must be an integer from 1 to 100")
+        if candidate_steps is not None:
+            if not isinstance(candidate_steps, (list, tuple)) or any(
+                not isinstance(step, (list, tuple)) for step in candidate_steps
+            ):
+                raise ValueError("candidate_steps must be a sequence of candidate sequences")
+
+        current_state = state
+        current_history = list(history or [])
+        events: list[dict[str, Any]] = []
+
+        # A workflow match is checked once against the host's complete current
+        # capability catalog. Execution and verification remain host-owned.
+        if candidate_steps is not None:
+            workflow = await asyncio.to_thread(
+                self.proxy.workflow,
+                task,
+                current_state,
+                candidate_steps,
+                current_history,
+                max_steps,
+            )
+            if workflow.get("source") == "learned" and isinstance(workflow.get("actions"), list):
+                calls: list[dict[str, Any]] = []
+                learned_ok = True
+                for step_number, raw_action in enumerate(workflow["actions"]):
+                    action = _normalize_action(raw_action)
+                    if action is None:
+                        learned_ok = False
+                        break
+                    result = await _invoke(execute, action)
+                    verified = None if verify is None else bool(await _invoke(verify, action, result))
+                    ok = _result_ok(result, verified)
+                    event = {
+                        "step": step_number,
+                        "state": current_state,
+                        "decision": {**workflow, "action": action},
+                        "action": action,
+                        "result": result,
+                        "verified": verified,
+                        "source": "learned",
+                    }
+                    events.append(event)
+                    calls.append(_tool_call(
+                        action,
+                        result,
+                        ok,
+                        {"state": current_state, "routing": {"source": "learned", "routeId": workflow.get("routeId"), "step": step_number}},
+                    ))
+                    if not ok:
+                        learned_ok = False
+                        break
+                    current_history.append(event)
+                    if observe is not None:
+                        current_state = await _invoke(observe, current_state, event, current_history)
+                if learned_ok and len(events) == len(workflow["actions"]):
+                    episode = await self._record_trajectory(
+                        task=task,
+                        calls=calls,
+                        outcome="success",
+                        route_resolution="learned",
+                        route_id=workflow.get("routeId"),
+                        metadata={**(metadata or {}), "steps": len(events), "sources": ["learned"]},
+                        finish_metadata=finish_metadata,
+                    )
+                    return JBrancherRunResult(events, current_state, current_history, "learned", "success", episode)
+
+                # A failed learned workflow is durable failure evidence. The
+                # single-step helper performs the immediate frontier recovery;
+                # the caller still receives the failed learned events.
+                failed_episode = await self._record_trajectory(
+                    task=task,
+                    calls=calls,
+                    outcome="failure",
+                    route_resolution="failed",
+                    route_id=workflow.get("routeId"),
+                    metadata={**(metadata or {}), "steps": len(events), "sources": ["learned"]},
+                    finish_metadata=finish_metadata,
+                    failure_reason="Learned workflow execution or postcondition failed",
+                )
+                recovery = await self.step(
+                    task,
+                    current_state,
+                    frontier=frontier,
+                    execute=execute,
+                    candidates=candidates,
+                    history=current_history,
+                    verify=verify,
+                    metadata={**(metadata or {}), "recovery": True},
+                    finish_metadata=finish_metadata,
+                )
+                events.append({
+                    "step": len(events),
+                    "state": current_state,
+                    "decision": recovery.decision,
+                    "action": recovery.action,
+                    "result": recovery.result,
+                    "verified": recovery.verified,
+                    "source": recovery.source,
+                })
+                return JBrancherRunResult(
+                    events,
+                    current_state,
+                    [*current_history, events[-1]],
+                    recovery.source,
+                    "success" if recovery.episode and recovery.episode.get("trace", {}).get("outcome") == "success" else "failure",
+                    recovery.episode or failed_episode,
+                    recovered=True,
+                )
+
+        calls: list[dict[str, Any]] = []
+        outcome = "unknown"
+        route_resolutions: list[str] = []
+        route_ids: list[str] = []
+        sources: list[str] = []
+        try:
+            for step_number in range(max_steps):
+                current_candidates = candidates
+                if candidate_provider is not None:
+                    current_candidates = await _invoke(candidate_provider, current_state, current_history)
+                if current_candidates is None:
+                    current_candidates = []
+                if not isinstance(current_candidates, (list, tuple)):
+                    raise TypeError("candidate_provider must return a sequence")
+                decision = await asyncio.to_thread(
+                    self.proxy.decide,
+                    task,
+                    current_state,
+                    list(current_candidates),
+                    current_history,
+                )
+                route_resolution = decision.get("routeResolution", "unmatched")
+                route_resolutions.append(route_resolution)
+                learned = decision.get("source") == "learned"
+                action = _normalize_action(decision.get("action") if learned else await _invoke(frontier, decision))
+                sources.append("learned" if learned else "frontier")
+                if isinstance(decision.get("routeId"), str):
+                    route_ids.append(decision["routeId"])
+                if action is None:
+                    outcome = "unknown"
+                    break
+                result = await _invoke(execute, action)
+                verified = None if verify is None else bool(await _invoke(verify, action, result))
+                ok = _result_ok(result, verified)
+                event = {
+                    "step": step_number,
+                    "state": current_state,
+                    "decision": decision,
+                    "action": action,
+                    "result": result,
+                    "verified": verified,
+                    "source": "learned" if learned else "frontier",
+                }
+                events.append(event)
+                calls.append(_tool_call(
+                    action,
+                    result,
+                    ok,
+                    {"state": current_state, "routing": {"source": sources[-1], "routeResolution": route_resolution, "step": step_number}},
+                ))
+                if not ok:
+                    outcome = "failure"
+                    break
+                outcome = "success"
+                current_history.append(event)
+                if observe is not None:
+                    current_state = await _invoke(observe, current_state, event, current_history)
+        except Exception:
+            if calls:
+                await self._record_trajectory(
+                    task=task,
+                    calls=calls,
+                    outcome="failure",
+                    route_resolution="failed",
+                    route_id=route_ids[0] if len(set(route_ids)) == 1 else None,
+                    metadata={**(metadata or {}), "steps": len(events), "sources": sources},
+                    finish_metadata=finish_metadata,
+                    failure_reason="Harness execution failed",
+                )
+            raise
+
+        episode = await self._record_trajectory(
+            task=task,
+            calls=calls,
+            outcome=outcome,
+            route_resolution="learned" if sources and all(source == "learned" for source in sources)
+            else route_resolutions[0] if route_resolutions else "unmatched",
+            route_id=route_ids[0] if len(route_ids) == 1 else None,
+            metadata={**(metadata or {}), "steps": len(events), "sources": sources},
+            finish_metadata=finish_metadata,
+        )
+        source = "learned" if sources and all(item == "learned" for item in sources) else "frontier" if sources else "abstain"
+        return JBrancherRunResult(events, current_state, current_history, source, outcome, episode)
+
+
+__all__ = ["JBrancherHarborLoop", "JBrancherStepResult", "JBrancherRunResult"]

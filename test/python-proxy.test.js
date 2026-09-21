@@ -88,6 +88,67 @@ async def run_harness_loop():
 
 asyncio.run(run_harness_loop())
 
+async def run_multi_step_workflow():
+    loop = JBrancherHarborLoop(proxy, source="python-workflow-test")
+    actions = [
+        {"tool": "read", "args": {"path": "package.json"}},
+        {"tool": "read", "args": {"path": "README.md"}},
+    ]
+
+    async def execute_workflow(action):
+        return {"ok": True, "output": action["args"]["path"]}
+
+    async def observe(state, event, history):
+        return {"phase": state["phase"] + 1}
+
+    for _ in range(2):
+        remaining = list(actions)
+
+        async def frontier(decision):
+            return remaining.pop(0)
+
+        result = await loop.run(
+            "Inspect package.json and then read README.md",
+            {"phase": 0},
+            candidates=[],
+            frontier=frontier,
+            execute=execute_workflow,
+            observe=observe,
+            max_steps=2,
+        )
+        assert result.source == "frontier", result
+        assert len(result.events) == 2, result
+        assert len(result.episode["trace"]["toolCalls"]) == 2, result
+
+    workflow = proxy.workflow(
+        "Inspect package.json and then read README.md",
+        {"phase": 0},
+        [[actions[0]], [actions[1]]],
+    )
+    assert workflow["source"] == "learned", workflow
+    assert len(workflow["actions"]) == 2, workflow
+    no_frontier = False
+
+    async def unexpected_frontier(decision):
+        nonlocal no_frontier
+        no_frontier = True
+        raise AssertionError("frontier should not run for an authorized learned workflow")
+
+    replay = await loop.run(
+        "Inspect package.json and then read README.md",
+        {"phase": 0},
+        candidate_steps=[[actions[0]], [actions[1]]],
+        frontier=unexpected_frontier,
+        execute=execute_workflow,
+        observe=observe,
+        max_steps=2,
+    )
+    assert replay.source == "learned", replay
+    assert replay.outcome == "success", replay
+    assert no_frontier is False
+
+asyncio.run(run_multi_step_workflow())
+
 async def run_failure_recovery():
     loop = JBrancherHarborLoop(proxy, source="python-recovery-test")
     frontier_calls = []
