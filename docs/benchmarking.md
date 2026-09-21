@@ -28,6 +28,7 @@ npm run bench:adaptation -- --assert
 npm run bench:dataset -- --assert
 npm run bench:persistence -- --assert
 npm run bench:verified-patch -- --assert
+npm run bench:template-learning -- --assert
 npm run bench:package -- --assert
 ```
 
@@ -125,6 +126,9 @@ dataset, use a hosted database, or require network access at runtime.
 - Postcondition-verified write arm: the third repeated action uses the learned
   route after two actor warm-ups, avoiding 33.3% of actor calls in that
   three-attempt trial.
+- Action-template generalization: two verified frontier teaching episodes learn
+  a parameterized lookup route, then four unseen query values replay locally;
+  frontier calls fall from 6 to 2 (66.7% fewer) with 100% replay success.
 - Context hill climb: 3,350 estimated context tokens down to 1,950 (41.8%
   fewer) while retaining 100% fixture coverage.
 

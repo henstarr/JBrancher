@@ -143,12 +143,47 @@ request and the episode is recorded as `routeResolution: "unmatched"`. When a
 later state exposes the action as legal, the same local evidence can become a
 fast path without adding a hand-written route.
 
+## Generalizing safe argument slots
+
+The generic runtime also mines a conservative `action-template` route for a
+single-step frontier action when the task visibly contains one of the action's
+string arguments. Two successful examples such as:
+
+```text
+lookup auth in docs    → lookup(query="auth", scope="docs")
+lookup billing in docs → lookup(query="billing", scope="docs")
+```
+
+can produce a stored template equivalent to:
+
+```text
+lookup {{jbrancher.slot.key-query}} in docs
+```
+
+The slot is extracted from a later task and filled into the action only after
+the harness exposes the resulting action in its current authorized candidate
+set. Constant arguments remain fixed. The learner only creates this template
+after seeing different values, and it stores the placeholder rather than the
+observed argument value. This is a generic-harness feature; Pi's built-in
+executor continues to use its stricter read and inspection route adapters.
+
+Unknown or side-effecting tools are still classified conservatively. To promote
+one, construct the runtime with `learningPromotionMode: 'verified'` and provide
+`learningOutcome`; the harness must confirm the postcondition for every
+teaching episode. A template is not permission to execute a new tool.
+
 ## Measure the cold-to-warm loop
 
 Run the local discovery benchmark:
 
 ```sh
 npm run bench:discovery -- --assert
+```
+
+Run the unseen-argument template benchmark:
+
+```sh
+npm run bench:template-learning -- --assert
 ```
 
 It simulates three unregistered read requests across repeated frontier turns,

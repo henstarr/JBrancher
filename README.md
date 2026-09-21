@@ -214,6 +214,15 @@ After observing two successful reads of different explicitly named project
 files, JBrancher may also learn a guarded path template and handle a new safe
 relative file request without a frontier turn.
 
+For other single-step tools, JBrancher can learn a conservative action template
+when the task visibly contains an argument used by the frontier action. For
+example, two verified episodes for `lookup auth in docs` and `lookup billing in
+docs` can produce a template for `lookup {query} in docs`; a later `lookup
+payments in docs` request can be authorized by the harness and replayed without
+another frontier call. Values are stored as slots rather than copied into the
+template. Side-effecting or unknown tools still require explicit postcondition
+verification before promotion.
+
 Use `/jbrancher candidates` to inspect candidates and `/jbrancher promote <id>`
 for explicit promotion. Unknown or side-effecting actions remain fallback-only
 until explicitly configured. If a learned route later fails during execution,
@@ -241,6 +250,16 @@ The cold-to-warm loop can be checked without a provider key:
 ```sh
 npm run bench:discovery -- --assert
 ```
+
+To measure argument-template generalization across unseen values, run:
+
+```sh
+npm run bench:template-learning -- --assert
+```
+
+The template benchmark teaches on two frontier episodes, then replays four
+unseen argument values. It is a local efficiency benchmark, not an official
+task-success benchmark.
 
 To measure portable dataset curation against the checked-in SWE-bench-derived
 fixture, run:

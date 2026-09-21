@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -346,6 +346,28 @@ test('learning can bind a safe read route to a new relative path', async () => {
   assert.equal(result.source, 'deterministic');
   assert.equal(result.result, 'contents of src/index.js');
   assert.equal((await router.decide({ task: 'delete secrets.pem' })).source, 'frontier');
+});
+
+test('learning derives a conservative action template from varied frontier arguments', () => {
+  const traces = [
+    { task: 'lookup auth in docs', outcome: 'success', metadata: { postconditionValidated: true }, toolCalls: [{ toolName: 'lookup', input: { query: 'auth', scope: 'docs' }, ok: true }] },
+    { task: 'lookup billing in docs', outcome: 'success', metadata: { postconditionValidated: true }, toolCalls: [{ toolName: 'lookup', input: { query: 'billing', scope: 'docs' }, ok: true }] }
+  ];
+  const candidates = proposeRoutes(traces);
+  const candidate = candidates.find(route => route.matcher?.type === 'action-template');
+  assert.ok(candidate);
+  assert.equal(candidate.matcher.template, 'lookup {{jbrancher.slot.key-query}} in docs');
+  assert.deepEqual(candidate.action.input, {
+    query: '{{jbrancher.slot.key-query}}',
+    scope: 'docs'
+  });
+  assert.equal(candidate.verified, true);
+  candidate.status = 'active';
+  assert.deepEqual(findLearnedActions([candidate], 'lookup payments in docs', { allowVerified: true }), [{
+    id: candidate.id,
+    action: { tool: 'lookup', args: { query: 'payments', scope: 'docs' } }
+  }]);
+  assert.deepEqual(findLearnedActions([candidate], 'lookup payments in tickets', { allowVerified: true }), []);
 });
 
 test('learning proposals ignore failed traces and unsafe actions', () => {

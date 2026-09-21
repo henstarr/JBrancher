@@ -157,6 +157,106 @@ function actionKey(toolName, input) {
   return JSON.stringify(stable({ toolName, input: redactValue(input) }));
 }
 
+const ACTION_TEMPLATE_SLOT_PREFIX = '{{jbrancher.slot.';
+const ACTION_TEMPLATE_SLOT_SUFFIX = '}}';
+
+function normalizeTemplateText(value) {
+  return redactText(String(value), 4000).toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function templateSlotToken(slotId) {
+  return `${ACTION_TEMPLATE_SLOT_PREFIX}${slotId}${ACTION_TEMPLATE_SLOT_SUFFIX}`;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function actionTemplateInput(input, slotValues = {}) {
+  if (typeof input === 'string') {
+    return Object.entries(slotValues).reduce((value, [slotId, replacement]) => {
+      return value.split(templateSlotToken(slotId)).join(replacement);
+    }, input);
+  }
+  if (Array.isArray(input)) return input.map(item => actionTemplateInput(item, slotValues));
+  if (!input || typeof input !== 'object') return input;
+  return Object.fromEntries(Object.entries(input).map(([key, value]) => [
+    key, actionTemplateInput(value, slotValues)
+  ]));
+}
+
+function taskTemplateMatch(matcher, task) {
+  if (matcher?.type !== 'action-template' || typeof matcher.template !== 'string'
+    || !Array.isArray(matcher.slots) || matcher.slots.length === 0) return null;
+  // Match the normalized template case-insensitively, but capture from the
+  // original task text so case-sensitive arguments are not silently changed.
+  const taskText = redactText(String(task), 4000).replace(/\s+/g, ' ').trim();
+  const parts = matcher.template.split(/(\{\{jbrancher\.slot\.[^}]+\}\})/g);
+  let pattern = '^';
+  const slotIds = [];
+  for (const part of parts) {
+    const match = part.match(/^\{\{jbrancher\.slot\.([^}]+)\}\}$/);
+    if (match) {
+      slotIds.push(match[1]);
+      pattern += '(.+?)';
+    } else {
+      pattern += escapeRegExp(part);
+    }
+  }
+  pattern += '$';
+  const result = new RegExp(pattern, 'i').exec(taskText);
+  if (!result) return null;
+  const values = {};
+  for (const [index, slotId] of slotIds.entries()) {
+    const value = result[index + 1]?.trim();
+    if (!value || value.length > 2000) return null;
+    values[slotId] = value;
+  }
+  return values;
+}
+
+function buildActionTemplateObservation(trace) {
+  if (!trace || !Array.isArray(trace.toolCalls) || trace.toolCalls.length !== 1) return null;
+  const call = trace.toolCalls[0];
+  if (!call?.toolName || !call.input || typeof call.input !== 'object' || Array.isArray(call.input)) return null;
+  // File reads already have a stricter path-aware generalizer. Keep this
+  // learner focused on other single-step actions and never template secrets.
+  if (call.toolName === 'read') return null;
+
+  const task = normalizeTemplateText(trace.task || '');
+  if (!task) return null;
+  let template = task;
+  const slots = [];
+  const templateInput = redactValue(call.input);
+  for (const [inputKey, rawValue] of Object.entries(call.input)) {
+    if (SECRET_KEY.test(inputKey) || typeof rawValue !== 'string') continue;
+    const value = normalizeTemplateText(rawValue);
+    if (value.length < 2 || value.length > 500) continue;
+    const index = template.indexOf(value);
+    if (index < 0) continue;
+    const slotId = `key-${inputKey}`;
+    const token = templateSlotToken(slotId);
+    if (template.includes(token)) continue;
+    template = `${template.slice(0, index)}${token}${template.slice(index + value.length)}`;
+    slots.push({ id: slotId, inputKey, value, rawValue });
+  }
+  if (slots.length === 0) return null;
+
+  const templatedInput = { ...templateInput };
+  for (const slot of slots) templatedInput[slot.inputKey] = templateSlotToken(slot.id);
+  return {
+    toolName: call.toolName,
+    taskTemplate: template,
+    slots,
+    action: { toolName: call.toolName, input: templatedInput },
+    observation: {
+      trace,
+      values: Object.fromEntries(slots.map(slot => [slot.id, slot.value])),
+      rawValues: Object.fromEntries(slots.map(slot => [slot.id, slot.rawValue]))
+    }
+  };
+}
+
 function safeInspectionCommand(command) {
   if (typeof command !== 'string' || command.length > 800) return false;
   if (/[;&|$><\x60\r\n]/.test(command)) return false;
@@ -233,6 +333,7 @@ function matchesStoredMatcher(matcher, task) {
     if (!path || matcher.exactTasks?.includes(normalized)) return false;
     return !matcher.exactPaths?.includes(normalizePath(path));
   }
+  if (matcher?.type === 'action-template') return taskTemplateMatch(matcher, task) !== null;
   return false;
 }
 
@@ -314,6 +415,12 @@ function learnedActionFromRecord(record, task, options = {}) {
         ...(actions[0].input?.limit === undefined ? {} : { limit: actions[0].input.limit })
       }
     };
+  }
+  if (record.matcher?.type === 'action-template') {
+    const slotValues = taskTemplateMatch(record.matcher, task);
+    if (!slotValues) return null;
+    const input = actionTemplateInput(actions[0].input, slotValues);
+    return { tool: actions[0].toolName, args: input };
   }
   if (!matchesStoredMatcher(record.matcher, task)) return null;
   return { tool: actions[0].toolName, args: actions[0].input };
@@ -415,7 +522,78 @@ export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilari
       }
     }
   }
-  return [...candidates, ...proposeReadPathRoutes(traces, { minimumObservations })];
+  return [
+    ...candidates,
+    ...proposeReadPathRoutes(traces, { minimumObservations }),
+    ...proposeActionTemplateRoutes(traces, { minimumObservations })
+  ];
+}
+
+/**
+ * Learn a reusable single-step action when the task visibly contains one or
+ * more action arguments. This is intentionally conservative: it only creates
+ * a template after the same task shape and action shape have been observed
+ * with different values. The route still inherits the trace safety class and
+ * therefore cannot be auto-promoted unless the harness explicitly verifies
+ * side effects.
+ */
+function proposeActionTemplateRoutes(traces, { minimumObservations = 2 } = {}) {
+  const groups = new Map();
+  for (const trace of traces) {
+    if (!trace || trace.outcome !== 'success' || !Array.isArray(trace.toolCalls)
+      || trace.toolCalls.length !== 1 || trace.toolCalls.some(call => call?.ok === false)) continue;
+    const observation = buildActionTemplateObservation(trace);
+    if (!observation) continue;
+    const signature = JSON.stringify(stable({
+      toolName: observation.toolName,
+      taskTemplate: observation.taskTemplate,
+      action: observation.action
+    }));
+    const group = groups.get(signature) || {
+      toolName: observation.toolName,
+      taskTemplate: observation.taskTemplate,
+      action: observation.action,
+      slots: observation.slots,
+      observations: []
+    };
+    group.observations.push(observation);
+    groups.set(signature, group);
+  }
+
+  return [...groups.values()]
+    .filter(group => group.observations.length >= minimumObservations)
+    .map(group => {
+      const variableSlots = group.slots.filter(slot => new Set(
+        group.observations.map(item => item.observation.values[slot.id])
+      ).size >= 2);
+      if (variableSlots.length === 0) return null;
+      const selectedTraces = group.observations.map(item => item.observation.trace);
+      const firstValues = group.observations[0].observation.rawValues;
+      const constantValues = Object.fromEntries(group.slots
+        .filter(slot => !variableSlots.some(variable => variable.id === slot.id))
+        .map(slot => [slot.id, firstValues[slot.id]]));
+      const matcher = {
+        type: 'action-template',
+        template: actionTemplateInput(group.taskTemplate, constantValues),
+        slots: variableSlots.map(slot => ({ id: slot.id, inputKey: slot.inputKey }))
+      };
+      const action = actionTemplateInput(group.action, constantValues);
+      return {
+        schemaVersion: 1,
+        id: `learned-${hash(`${JSON.stringify(matcher)}\n${JSON.stringify(action)}`)}`,
+        status: 'candidate',
+        matcher,
+        action,
+        safety: classifyTraceSafety([action]),
+        verified: selectedTraces.every(trace => trace.metadata?.postconditionValidated === true),
+        observations: selectedTraces.length,
+        usage: summarizeTraceUsage(selectedTraces),
+        examples: selectedTraces.slice(-5).map(trace => trace.task),
+        firstSeen: selectedTraces[0].createdAt,
+        lastSeen: selectedTraces.at(-1).createdAt
+      };
+    })
+    .filter(Boolean);
 }
 
 function proposeReadPathRoutes(traces, { minimumObservations = 2 } = {}) {
