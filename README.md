@@ -223,6 +223,10 @@ another frontier call. Values are stored as slots rather than copied into the
 template. Side-effecting or unknown tools still require explicit postcondition
 verification before promotion.
 
+The same mechanism applies to verified multi-step workflows. JBrancher fills
+the learned slots, then checks every resulting action against the harness's
+current candidate catalog before executing the sequence.
+
 Use `/jbrancher candidates` to inspect candidates and `/jbrancher promote <id>`
 for explicit promotion. Unknown or side-effecting actions remain fallback-only
 until explicitly configured. If a learned route later fails during execution,
@@ -260,6 +264,15 @@ npm run bench:template-learning -- --assert
 The template benchmark teaches on two frontier episodes, then replays four
 unseen argument values. It is a local efficiency benchmark, not an official
 task-success benchmark.
+
+For multi-step parameterized replay, run:
+
+```sh
+npm run bench:template-workflow-learning -- --assert
+```
+
+This teaches two verified two-step workflows, then replays two new values with
+50% fewer frontier action calls.
 
 To measure portable dataset curation against the checked-in SWE-bench-derived
 fixture, run:

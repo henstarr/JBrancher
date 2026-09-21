@@ -29,6 +29,7 @@ npm run bench:dataset -- --assert
 npm run bench:persistence -- --assert
 npm run bench:verified-patch -- --assert
 npm run bench:template-learning -- --assert
+npm run bench:template-workflow-learning -- --assert
 npm run bench:package -- --assert
 ```
 
@@ -129,6 +130,9 @@ dataset, use a hosted database, or require network access at runtime.
 - Action-template generalization: two verified frontier teaching episodes learn
   a parameterized lookup route, then four unseen query values replay locally;
   frontier calls fall from 6 to 2 (66.7% fewer) with 100% replay success.
+- Multi-step action-template generalization: two verified two-step teaching
+  workflows replay two unseen values, reducing frontier action calls from 8 to 4
+  (50% fewer) with every step reauthorized by the harness.
 - Context hill climb: 3,350 estimated context tokens down to 1,950 (41.8%
   fewer) while retaining 100% fixture coverage.
 

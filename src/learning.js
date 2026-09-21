@@ -186,7 +186,8 @@ function actionTemplateInput(input, slotValues = {}) {
 }
 
 function taskTemplateMatch(matcher, task) {
-  if (matcher?.type !== 'action-template' || typeof matcher.template !== 'string'
+  if (!['action-template', 'action-template-workflow'].includes(matcher?.type)
+    || typeof matcher.template !== 'string'
     || !Array.isArray(matcher.slots) || matcher.slots.length === 0) return null;
   // Match the normalized template case-insensitively, but capture from the
   // original task text so case-sensitive arguments are not silently changed.
@@ -254,6 +255,49 @@ function buildActionTemplateObservation(trace) {
       values: Object.fromEntries(slots.map(slot => [slot.id, slot.value])),
       rawValues: Object.fromEntries(slots.map(slot => [slot.id, slot.rawValue]))
     }
+  };
+}
+
+function buildActionTemplateWorkflowObservation(trace) {
+  if (!trace || !Array.isArray(trace.toolCalls) || trace.toolCalls.length < 2) return null;
+  const task = normalizeTemplateText(trace.task || '');
+  if (!task) return null;
+  let taskTemplate = task;
+  const slots = [];
+  const actions = [];
+  const values = {};
+  const rawValues = {};
+
+  for (const [step, call] of trace.toolCalls.entries()) {
+    if (!call?.toolName || !call.input || typeof call.input !== 'object' || Array.isArray(call.input)) return null;
+    const input = redactValue(call.input);
+    for (const [inputKey, rawValue] of Object.entries(call.input)) {
+      if (SECRET_KEY.test(inputKey) || typeof rawValue !== 'string') continue;
+      const value = normalizeTemplateText(rawValue);
+      if (value.length < 2 || value.length > 500) continue;
+      const existing = slots.find(slot => slot.value === value);
+      if (existing) {
+        input[inputKey] = templateSlotToken(existing.id);
+        continue;
+      }
+      const index = taskTemplate.indexOf(value);
+      if (index < 0) continue;
+      const slotId = `step-${step}-key-${inputKey}`;
+      const token = templateSlotToken(slotId);
+      taskTemplate = `${taskTemplate.slice(0, index)}${token}${taskTemplate.slice(index + value.length)}`;
+      slots.push({ id: slotId, inputKey, step, value, rawValue });
+      values[slotId] = value;
+      rawValues[slotId] = rawValue;
+      input[inputKey] = token;
+    }
+    actions.push({ toolName: call.toolName, input });
+  }
+  if (slots.length === 0) return null;
+  return {
+    taskTemplate,
+    slots,
+    action: { actions },
+    observation: { trace, values, rawValues }
   };
 }
 
@@ -333,7 +377,9 @@ function matchesStoredMatcher(matcher, task) {
     if (!path || matcher.exactTasks?.includes(normalized)) return false;
     return !matcher.exactPaths?.includes(normalizePath(path));
   }
-  if (matcher?.type === 'action-template') return taskTemplateMatch(matcher, task) !== null;
+  if (['action-template', 'action-template-workflow'].includes(matcher?.type)) {
+    return taskTemplateMatch(matcher, task) !== null;
+  }
   return false;
 }
 
@@ -360,6 +406,12 @@ function isLearnedRecordUsable(record, { allowVerified = false } = {}) {
 
 function routeFromRecord(record, options = {}) {
   if (!isLearnedRecordUsable(record, options)) return null;
+
+  // Generic templates are filled by the harness-neutral runtime, which can
+  // re-check its live candidate catalog. Pi's route adapter has no equivalent
+  // authorization hook for arbitrary parameterized actions, so keep it on its
+  // stricter exact/path-specific adapters.
+  if (['action-template', 'action-template-workflow'].includes(record.matcher?.type)) return null;
 
   if (record.matcher?.type === 'read-path') {
     const action = record.action;
@@ -460,9 +512,15 @@ export function findLearnedWorkflows(records = [], task = '', options = {}) {
     if (!isLearnedRecordUsable(record, options)) return null;
     const actions = actionsFromRecord(record);
     if (actions.length < 2 || record.matcher?.type === 'read-path' || !matchesStoredMatcher(record.matcher, task)) return null;
+    const slotValues = record.matcher?.type === 'action-template-workflow'
+      ? taskTemplateMatch(record.matcher, task) : null;
+    if (record.matcher?.type === 'action-template-workflow' && !slotValues) return null;
     return {
       id: record.id,
-      actions: actions.map(action => ({ tool: action.toolName, args: action.input }))
+      actions: actions.map(action => ({
+        tool: action.toolName,
+        args: slotValues ? actionTemplateInput(action.input, slotValues) : action.input
+      }))
     };
   }).filter(Boolean);
 }
@@ -525,7 +583,8 @@ export function proposeRoutes(traces, { minimumObservations = 2, minimumSimilari
   return [
     ...candidates,
     ...proposeReadPathRoutes(traces, { minimumObservations }),
-    ...proposeActionTemplateRoutes(traces, { minimumObservations })
+    ...proposeActionTemplateRoutes(traces, { minimumObservations }),
+    ...proposeActionTemplateWorkflowRoutes(traces, { minimumObservations })
   ];
 }
 
@@ -585,6 +644,68 @@ function proposeActionTemplateRoutes(traces, { minimumObservations = 2 } = {}) {
         matcher,
         action,
         safety: classifyTraceSafety([action]),
+        verified: selectedTraces.every(trace => trace.metadata?.postconditionValidated === true),
+        observations: selectedTraces.length,
+        usage: summarizeTraceUsage(selectedTraces),
+        examples: selectedTraces.slice(-5).map(trace => trace.task),
+        firstSeen: selectedTraces[0].createdAt,
+        lastSeen: selectedTraces.at(-1).createdAt
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Learn a parameterized multi-step workflow from successful frontier traces.
+ * The generic runtime still re-authorizes every filled action before replay,
+ * and non-read-only workflows require verified promotion.
+ */
+function proposeActionTemplateWorkflowRoutes(traces, { minimumObservations = 2 } = {}) {
+  const groups = new Map();
+  for (const trace of traces) {
+    if (!trace || trace.outcome !== 'success' || !Array.isArray(trace.toolCalls)
+      || trace.toolCalls.length < 2 || trace.toolCalls.some(call => call?.ok === false)) continue;
+    const observation = buildActionTemplateWorkflowObservation(trace);
+    if (!observation) continue;
+    const signature = JSON.stringify(stable({
+      taskTemplate: observation.taskTemplate,
+      action: observation.action
+    }));
+    const group = groups.get(signature) || {
+      taskTemplate: observation.taskTemplate,
+      action: observation.action,
+      slots: observation.slots,
+      observations: []
+    };
+    group.observations.push(observation);
+    groups.set(signature, group);
+  }
+
+  return [...groups.values()]
+    .filter(group => group.observations.length >= minimumObservations)
+    .map(group => {
+      const variableSlots = group.slots.filter(slot => new Set(
+        group.observations.map(item => item.observation.values[slot.id])
+      ).size >= 2);
+      if (variableSlots.length === 0) return null;
+      const selectedTraces = group.observations.map(item => item.observation.trace);
+      const firstValues = group.observations[0].observation.rawValues;
+      const constantValues = Object.fromEntries(group.slots
+        .filter(slot => !variableSlots.some(variable => variable.id === slot.id))
+        .map(slot => [slot.id, firstValues[slot.id]]));
+      const matcher = {
+        type: 'action-template-workflow',
+        template: actionTemplateInput(group.taskTemplate, constantValues),
+        slots: variableSlots.map(slot => ({ id: slot.id, inputKey: slot.inputKey, step: slot.step }))
+      };
+      const action = actionTemplateInput(group.action, constantValues);
+      return {
+        schemaVersion: 1,
+        id: `learned-${hash(`${JSON.stringify(matcher)}\n${JSON.stringify(action)}`)}`,
+        status: 'candidate',
+        matcher,
+        action,
+        safety: classifyTraceSafety(action.actions),
         verified: selectedTraces.every(trace => trace.metadata?.postconditionValidated === true),
         observations: selectedTraces.length,
         usage: summarizeTraceUsage(selectedTraces),

@@ -31,6 +31,7 @@
     "bench:learning": "node benchmarks/run-learning.js",
     "bench:discovery": "node benchmarks/run-discovery.js",
     "bench:template-learning": "node benchmarks/run-template-learning.js",
+    "bench:template-workflow-learning": "node benchmarks/run-template-workflow-learning.js",
     "bench:dataset": "node benchmarks/run-dataset-curation.js",
     "bench:persistence": "node benchmarks/run-persistence.js",
     "bench:verified-patch": "node benchmarks/run-verified-patch.js",

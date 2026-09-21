@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -368,6 +368,31 @@ test('learning derives a conservative action template from varied frontier argum
     action: { tool: 'lookup', args: { query: 'payments', scope: 'docs' } }
   }]);
   assert.deepEqual(findLearnedActions([candidate], 'lookup payments in tickets', { allowVerified: true }), []);
+});
+
+test('learning derives a parameterized multi-step workflow and fills every step', () => {
+  const traces = [
+    { task: 'inspect auth in docs', outcome: 'success', metadata: { postconditionValidated: true }, toolCalls: [
+      { toolName: 'lookup', input: { query: 'auth', scope: 'docs' }, ok: true },
+      { toolName: 'summarize', input: { topic: 'auth', scope: 'docs' }, ok: true }
+    ] },
+    { task: 'inspect billing in docs', outcome: 'success', metadata: { postconditionValidated: true }, toolCalls: [
+      { toolName: 'lookup', input: { query: 'billing', scope: 'docs' }, ok: true },
+      { toolName: 'summarize', input: { topic: 'billing', scope: 'docs' }, ok: true }
+    ] }
+  ];
+  const candidate = proposeRoutes(traces).find(route => route.matcher?.type === 'action-template-workflow');
+  assert.ok(candidate);
+  assert.equal(candidate.matcher.template, 'inspect {{jbrancher.slot.step-0-key-query}} in docs');
+  candidate.status = 'active';
+  assert.deepEqual(findLearnedWorkflows([candidate], 'inspect payments in docs', { allowVerified: true }), [{
+    id: candidate.id,
+    actions: [
+      { tool: 'lookup', args: { query: 'payments', scope: 'docs' } },
+      { tool: 'summarize', args: { topic: 'payments', scope: 'docs' } }
+    ]
+  }]);
+  assert.deepEqual(findLearnedWorkflows([candidate], 'inspect payments in tickets', { allowVerified: true }), []);
 });
 
 test('learning proposals ignore failed traces and unsafe actions', () => {

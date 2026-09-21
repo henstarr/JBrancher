@@ -172,6 +172,14 @@ one, construct the runtime with `learningPromotionMode: 'verified'` and provide
 `learningOutcome`; the harness must confirm the postcondition for every
 teaching episode. A template is not permission to execute a new tool.
 
+The same slot mechanism supports multi-step workflows. A successful trajectory
+with two or more actions can become an `action-template-workflow` route when
+the task-visible argument changes across repeated examples. At replay time,
+JBrancher fills the argument in every step and asks the harness for the current
+authorized candidate set before each execution. This keeps workflow reuse
+compatible with capability drift; a missing or changed step causes the runtime
+to abandon the shortcut and return to the frontier actor.
+
 ## Measure the cold-to-warm loop
 
 Run the local discovery benchmark:
@@ -184,6 +192,12 @@ Run the unseen-argument template benchmark:
 
 ```sh
 npm run bench:template-learning -- --assert
+```
+
+Run the multi-step template benchmark:
+
+```sh
+npm run bench:template-workflow-learning -- --assert
 ```
 
 It simulates three unregistered read requests across repeated frontier turns,
