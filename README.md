@@ -754,6 +754,8 @@ The latest three-task live-Codex run is recorded in
 [docs/live-codex-3tasks-2026-09-21.md](docs/live-codex-3tasks-2026-09-21.md).
 The current `jev-latest` compatibility run is recorded in
 [docs/live-jev-latest-2026-09-21.md](docs/live-jev-latest-2026-09-21.md).
+The latest three-task paired live Jev run is recorded in
+[docs/live-jev-3tasks-2026-09-21.md](docs/live-jev-3tasks-2026-09-21.md).
 The latest three-task Pi preference-learning run is recorded in
 [docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
 The full 14-task Choice-evaluator run is recorded in
