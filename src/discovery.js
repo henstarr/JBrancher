@@ -117,6 +117,55 @@ export function createOpenWorldLearner({
     });
   }
 
+  /**
+   * Ingest one completed frontier trajectory without exposing the recorder
+   * lifecycle to a harness adapter. The harness still owns execution and the
+   * outcome; this helper only durably records, redacts, and mines the episode.
+   */
+  async function recordEpisode({
+    task,
+    episodeCwd = cwd,
+    episodeSource = source,
+    routeResolution = 'unmatched',
+    metadata = {},
+    toolCalls = [],
+    outcome,
+    finishMetadata = {}
+  } = {}) {
+    if (!Array.isArray(toolCalls)) throw new TypeError('toolCalls must be an array');
+    for (const call of toolCalls) {
+      if (!call || typeof call !== 'object' || typeof call.toolName !== 'string' || !call.toolName) {
+        throw new TypeError('Each toolCall must include a non-empty toolName');
+      }
+    }
+    const episode = begin({ task, episodeCwd, episodeSource, routeResolution, metadata });
+    try {
+      for (const [index, call] of toolCalls.entries()) {
+        const toolCallId = call.toolCallId ?? `frontier-call-${index}`;
+        episode.recordToolCall({
+          toolCallId,
+          toolName: call.toolName,
+          input: call.input,
+          context: call.context
+        });
+        if (Object.hasOwn(call, 'ok') || Object.hasOwn(call, 'output') || Object.hasOwn(call, 'content')) {
+          episode.recordToolResult({
+            toolCallId,
+            isError: call.ok === false,
+            output: call.output ?? call.content
+          });
+        }
+      }
+      return await episode.finish({ outcome, metadata: finishMetadata });
+    } catch (error) {
+      await episode.finish({
+        outcome: 'failure',
+        metadata: { ...finishMetadata, error: redactText(error?.message || String(error), 500) }
+      }).catch(() => {});
+      throw error;
+    }
+  }
+
   async function snapshot() {
     const [traces, routes] = await Promise.all([
       typeof learningStore.readTraces === 'function' ? learningStore.readTraces() : [],
@@ -184,6 +233,7 @@ export function createOpenWorldLearner({
   return {
     store: learningStore,
     begin,
+    recordEpisode,
     learn,
     snapshot,
     activeEpisodeIds: () => [...episodes.keys()]

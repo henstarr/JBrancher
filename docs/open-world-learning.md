@@ -45,6 +45,22 @@ try {
 }
 ```
 
+If the harness already has a completed trajectory, it can use the one-call
+adapter instead:
+
+```js
+await learner.recordEpisode({
+  task,
+  routeResolution: 'unmatched',
+  metadata: { candidateCount: 0 },
+  toolCalls: completedFrontierToolCalls,
+  outcome: harness.isComplete() ? 'success' : 'unknown'
+});
+```
+
+`recordEpisode` performs the same redaction, durable append, dataset export,
+candidate mining, and optional promotion as the lower-level lifecycle API.
+
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
 by the learning store.

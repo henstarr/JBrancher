@@ -94,3 +94,33 @@ test('open-world learner keeps no-tool frontier work as demand evidence', async 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('open-world learner ingests a completed frontier trajectory in one call', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-ingest-'));
+  try {
+    const learner = createOpenWorldLearner({ directory, source: 'batch-harness' });
+    const saved = await learner.recordEpisode({
+      task: 'inspect package.json',
+      metadata: { candidateCount: 0, apiKey: 'apikey_should_not_persist_1234567890' },
+      toolCalls: [{
+        toolName: 'read',
+        input: { path: 'package.json' },
+        ok: true,
+        output: 'package contents'
+      }],
+      outcome: 'success'
+    });
+    assert.equal(saved.source, 'batch-harness');
+    assert.equal(saved.routeResolution, 'unmatched');
+    assert.equal((await learner.store.readTraces()).length, 1);
+    const datasetText = await readFile(join(directory, 'dataset.jsonl'), 'utf8');
+    assert.doesNotMatch(datasetText, /apikey_should_not_persist/);
+    assert.equal((await learner.store.readRoutes()).length, 1);
+    await assert.rejects(
+      learner.recordEpisode({ task: 'bad input', toolCalls: [{ input: {} }] }),
+      /toolName/
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

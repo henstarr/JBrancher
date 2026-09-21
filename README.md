@@ -233,6 +233,9 @@ For a harness-neutral adapter that can collect any unknown route, use
 `jbrancher/discovery`. It accepts episode lifecycle events from the existing
 frontier actor and handles local redaction, dataset append, candidate mining,
 and safe promotion. See [open-world route discovery](docs/open-world-learning.md).
+If the harness already has the completed frontier trajectory, call
+`learner.recordEpisode({ task, toolCalls, outcome, metadata })` to ingest it in
+one step; no external database or manual route registration is required.
 The cold-to-warm loop can be checked without a provider key:
 
 ```sh
