@@ -8,6 +8,9 @@
   routes.
 - Add a bounded `/v1/workflow` endpoint and Python/Harbor `run()` helper for
   capturing and replaying authorized multi-step local workflows.
+- Add an opt-in real SWE-bench test-boundary replay benchmark with disposable
+  git worktrees, official test/gold patches, verified dynamic authorization,
+  and optional persistent local learning state.
 
 ## 0.1.0 - 2026-09-17
 

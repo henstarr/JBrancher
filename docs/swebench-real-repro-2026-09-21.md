@@ -34,14 +34,36 @@ it did not affect the test result. The isolated environment required
 `setuptools<81` and `click<8.1` because this historical repository predates the
 current dependency APIs.
 
+## JBrancher replay run
+
+The real test-boundary benchmark was then run with four disposable git
+worktrees and a persistent local learning directory:
+
+```text
+baseline frontier calls: 8
+actual frontier calls:   4
+learned replays:         2
+verified active routes:  1
+pytest passes:            4/4
+frontier-call reduction: 50%
+```
+
+The first two episodes applied the published fix and ran the official test via
+the actor path. After two verified observations, the final two episodes used
+the dynamic `authorize` path to replay the same two-step workflow. The test
+still passed in every fresh worktree. A persistent run stores raw traces,
+curated dataset rows, and active routes under the supplied `--learning-dir`.
+The deterministic benchmark actor reports provider usage as unmeasured; a live
+frontier actor must be substituted for token and cost measurements.
+
 ## Why this matters for JBrancher
 
 This confirms that the checked-in SWE-bench-derived instance refers to a real
 reproducible bug and that the official `FAIL_TO_PASS` boundary can be exercised
-on this machine. The next agent benchmark should run an actor-only and a
-JBrancher-wrapped action loop against this same disposable checkout, using the
-same test command as the postcondition. The route-learning result must report
-provider usage separately from test success.
+on this machine. The replay benchmark now runs the actor and JBrancher-wrapped
+loops against disposable worktrees using the same test command as the
+postcondition. Its route-learning result reports provider usage separately from
+test success.
 
 The official SWE-bench evaluator was not run because this Windows host has no
 Docker daemon, WSL, or Modal client. The official evaluator remains the source

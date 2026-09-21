@@ -130,6 +130,41 @@ npm run bench:provenance
 This command is benchmark tooling only. JBrancher itself does not fetch the
 dataset, use a hosted database, or require network access at runtime.
 
+### Real SWE-bench test-boundary replay
+
+The opt-in real replay benchmark uses one actual SWE-bench checkout and the
+official test boundary. Prepare a repository containing the instance's
+`base_commit` and keep the matching isolated Python environment alongside that
+checkout. The script fetches the official `test_patch` and `patch` from the
+dataset row; an optional `--test-patch PATH` can supply a local copy. The
+checked-in reproduction uses `sqlfluff__sqlfluff-1625`; with that checkout, run:
+
+```sh
+npm run bench:swebench-real -- \
+  --workspace PATH_TO_SQLFLUFF_CHECKOUT \
+  --python PATH_TO_VENV_PYTHON \
+  --learning-dir .jbrancher/swebench/sqlfluff-1625 \
+  --assert
+```
+
+The script fetches the current SWE-bench row, creates disposable git
+worktrees, applies the official test patch and published gold patch, and runs
+the real `FAIL_TO_PASS` pytest through JBrancher. The first two attempts teach
+the route through the dynamic `authorize` callback; later attempts replay the
+verified two-step workflow without actor calls. This is a real postcondition
+and replay benchmark, not autonomous patch synthesis and not an official
+SWE-bench resolution score. Provider token usage is intentionally reported as
+unmeasured because the default actor is a deterministic fixture; use a live
+actor integration for model-cost measurements.
+
+Pass `--learning-dir` to keep the generated `traces.jsonl`, `dataset.jsonl`,
+and `routes.json` for later inspection or import into another harness. Without
+it, the benchmark keeps learning state beside its disposable worktrees and
+removes it when the run ends.
+
+The command is opt-in and is not part of CI because historical SWE-bench
+environments require repository-specific dependency setup and can be slow.
+
 - Pi-style read-only replay: 112 simulated frontier calls down to 56 (50%
   fewer), handling all 56 held-out post-warm-up attempts (100% held-out route
   coverage) and saving 3,224 estimated prompt tokens.

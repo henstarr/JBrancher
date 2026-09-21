@@ -46,6 +46,7 @@
     "bench:live-codex-proxy": "node benchmarks/run-live-codex-proxy-learning.js",
     "bench:live-pi-learning": "node benchmarks/run-live-pi-learning.js",
     "bench:provenance": "node benchmarks/verify-swebench-fixture.js",
+    "bench:swebench-real": "node benchmarks/run-swebench-real-replay.js",
     "bench:swebench": "node benchmarks/run-official-swebench.js",
     "bench:swebench-validate": "node benchmarks/validate-swebench-predictions.js",
     "bench:package": "node benchmarks/run-package-smoke.js"

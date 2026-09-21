@@ -306,6 +306,24 @@ This writes a small bug fix, runs its focused test, and then replays the
 verified multi-step workflow in fresh workspaces. Writes are only reused after
 the postcondition verifier passes twice.
 
+For a real SWE-bench test boundary, prepare the checked-in SQLFluff
+reproduction at its recorded base commit, then run:
+
+```sh
+npm run bench:swebench-real -- \
+  --workspace PATH_TO_SQLFLUFF_CHECKOUT \
+  --python PATH_TO_VENV_PYTHON \
+  --learning-dir .jbrancher/swebench/sqlfluff-1625 \
+  --assert
+```
+
+This fetches and applies the official `test_patch` and published gold patch in
+disposable worktrees, runs the real `FAIL_TO_PASS` test, and teaches/replays the
+verified two-step route using the dynamic authorization path. It validates real
+test execution and replay wiring; it does not claim autonomous patch generation
+or an official SWE-bench score. See [docs/benchmarking.md](docs/benchmarking.md)
+for the environment contract.
+
 For a generic harness or offline inspection, export the same local dataset
 without changing route status:
 
