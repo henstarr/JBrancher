@@ -94,6 +94,7 @@ function expectedAction(value) {
 
 const valueCount = numericFlag('--values', 4, { min: 3, max: 6 });
 const shouldAssert = process.argv.includes('--assert');
+const authorizationOnly = process.argv.includes('--authorization-only');
 const values = ['authentication', 'billing', 'payments', 'reliability', 'security', 'performance'].slice(0, valueCount);
 const executable = process.env.JBRANCHER_CODEX_EXECUTABLE
   || (process.platform === 'win32' ? 'codex.exe' : 'codex');
@@ -121,6 +122,7 @@ try {
   const teachingRows = [];
   const novelRows = [];
   let actorCalls = 0;
+  let authorizationCalls = 0;
   const teachingValues = values.slice(0, 2);
   const novelValues = values.slice(2);
 
@@ -128,7 +130,13 @@ try {
     const task = `lookup ${value} in docs`;
     const expected = expectedAction(value);
     const brancher = createJBrancher({
-      getCandidates: async () => [expected],
+      ...(authorizationOnly ? {} : { getCandidates: async () => [expected] }),
+      ...(authorizationOnly ? {
+        authorize: async ({ action }) => {
+          authorizationCalls++;
+          return JSON.stringify(action) === JSON.stringify(expected);
+        }
+      } : {}),
       actor: async () => {
         actorCalls++;
         const result = await askCodex({ task, cwd: root, executable });
@@ -189,6 +197,8 @@ try {
   const report = {
     benchmark: 'live-Codex-open-world-action-template-learning',
     actor: executable,
+    authorizationOnly,
+    capabilityCatalog: authorizationOnly ? 'omitted' : 'bounded-candidates',
     values,
     baselineActorCalls: values.length,
     learnedActorCalls: actorCalls,
@@ -200,6 +210,7 @@ try {
     novelValues,
     verifiedTeachingEpisodes: teachingRows.filter(row => row.correct).length,
     novelFrontierCalls: novelRows.filter(row => row.source === 'actor').length,
+    authorizationChecks: authorizationCalls,
     providerTokensSaved: (baselineUsage.inputTokens + baselineUsage.outputTokens)
       - (learnedUsage.inputTokens + learnedUsage.outputTokens),
     templateRoutes: templateRoutes.map(route => ({
@@ -227,6 +238,7 @@ try {
     assert.ok(report.learnedTaskSuccess);
     assert.equal(report.novelFrontierCalls, 0);
     assert.ok(report.learnedRouteCoverage);
+    if (authorizationOnly) assert.ok(report.authorizationChecks > 0);
     assert.equal(templateRoutes.length, 1);
     assert.equal(templateRoutes[0].status, 'active');
     assert.equal(templateRoutes[0].verified, true);

@@ -858,6 +858,8 @@ The experimental live Codex argument-template pilot is recorded in
 [docs/live-codex-template-2026-09-21.md](docs/live-codex-template-2026-09-21.md).
 The latest four-value live template run is recorded in
 [docs/live-codex-template-4values-2026-09-20.md](docs/live-codex-template-4values-2026-09-20.md).
+The latest live Codex authorization-only run is recorded in
+[docs/live-codex-authorization-2026-09-21.md](docs/live-codex-authorization-2026-09-21.md).
 The latest three-task live-Codex run is recorded in
 [docs/live-codex-3tasks-2026-09-21.md](docs/live-codex-3tasks-2026-09-21.md).
 The latest seven-task live-Codex run is recorded in
@@ -924,6 +926,17 @@ route coverage, and correctly fell back once when authorization was revoked.
 The result uses synthetic actor-token assumptions and is not an official
 SWE-bench patch-resolution score; see
 [docs/dynamic-authorization-2026-09-21.md](docs/dynamic-authorization-2026-09-21.md).
+
+For the same boundary with real Codex usage, run:
+
+```sh
+npm run bench:live-codex-template -- --values 4 --authorization-only --assert
+```
+
+This omits `getCandidates`, uses the harness authorization callback, and
+reports observed Codex tokens. The latest four-value run saved 31,842 observed
+tokens and served both novel values locally; see
+[docs/live-codex-authorization-2026-09-21.md](docs/live-codex-authorization-2026-09-21.md).
 
 For the live Pi route-choice benchmark, calibrate thresholds explicitly and
 keep assertions enabled:
