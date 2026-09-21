@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLocalLearningStore } from '../src/learning.js';
+import { createLocalLearningStore, mergeDatasetExamples } from '../src/learning.js';
 
 const fixture = JSON.parse(await readFile(new URL('./fixtures/swebench-lite-mini.json', import.meta.url), 'utf8'));
 
@@ -43,6 +43,10 @@ try {
 
   const raw = await store.writeDataset();
   const curated = await store.writeDataset({ deduplicate: true });
+  const portableMerged = mergeDatasetExamples([
+    raw.examples.filter((_, index) => index % 2 === 0),
+    raw.examples.filter((_, index) => index % 2 === 1)
+  ]);
   const report = {
     benchmark: 'JBrancher local dataset curation',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
@@ -54,6 +58,9 @@ try {
     duplicateRowsRemoved: raw.examples.length - curated.examples.length,
     curationRatio: Number((1 - curated.examples.length / raw.examples.length).toFixed(3)),
     evidenceObservations: curated.examples.reduce((total, example) => total + example.evidence.observations, 0),
+    portableMergedExamples: portableMerged.length,
+    portableMergeObservations: portableMerged.reduce((total, example) => total + example.evidence.observations, 0),
+    portableMergeNoExternalDatabase: true,
     reusableCuratedExamples: curated.examples.filter(example => example.reusable).length,
     uniqueFingerprints: new Set(curated.examples.map(example => example.fingerprint)).size
   };
@@ -63,6 +70,9 @@ try {
     assert.equal(report.curatedExamples, instances.length);
     assert.equal(report.separateLiveAndCuratedFiles, true);
     assert.equal(report.evidenceObservations, report.rawExamples);
+    assert.equal(report.portableMergedExamples, report.curatedExamples);
+    assert.equal(report.portableMergeObservations, report.rawExamples);
+    assert.equal(report.portableMergeNoExternalDatabase, true);
     assert.equal(report.uniqueFingerprints, report.curatedExamples);
     assert.equal(report.reusableCuratedExamples, report.curatedExamples);
     assert.equal(report.curationRatio, Number((1 - 1 / repetitions).toFixed(3)));

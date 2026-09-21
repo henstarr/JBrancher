@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, mergeDatasetExamples, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -442,6 +442,32 @@ test('curated dataset export collapses duplicate trajectories but preserves evid
   });
   assert.equal(curated.firstSeen, '2026-09-20T00:00:00.000Z');
   assert.equal(curated.lastSeen, '2026-09-20T00:01:00.000Z');
+});
+
+test('dataset exports merge locally without promoting imported routes', () => {
+  const first = traceToDatasetExample({
+    id: 'first',
+    task: 'inspect package.json',
+    source: 'machine-a',
+    outcome: 'success',
+    createdAt: '2026-09-20T00:00:00.000Z',
+    metadata: { apiKey: 'apikey_should_not_persist_1234567890' },
+    toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  const second = traceToDatasetExample({
+    id: 'second',
+    task: 'inspect package.json',
+    source: 'machine-b',
+    outcome: 'success',
+    createdAt: '2026-09-20T00:01:00.000Z',
+    toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+  });
+  const merged = mergeDatasetExamples([[first], [second]]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].evidence.observations, 2);
+  assert.deepEqual(merged[0].evidence.sources, ['machine-a', 'machine-b']);
+  assert.doesNotMatch(JSON.stringify(merged), /apikey_should_not_persist/);
+  assert.throws(() => mergeDatasetExamples([[{ task: 'missing fingerprint' }]]), /fingerprint/);
 });
 
 test('unsafe candidates require explicit force to promote', async () => {

@@ -892,6 +892,26 @@ export function deduplicateDataset(examples) {
   return [...groups.values()].sort((left, right) => left.fingerprint.localeCompare(right.fingerprint));
 }
 
+/**
+ * Merge redacted dataset exports from separate local workspaces.
+ *
+ * This is an explicit data-export operation. It does not mutate a learning
+ * store or promote imported examples into executable routes.
+ */
+export function mergeDatasetExamples(exampleSets = []) {
+  if (!Array.isArray(exampleSets) || exampleSets.some(set => !Array.isArray(set))) {
+    throw new TypeError('exampleSets must be an array of example arrays');
+  }
+  const examples = exampleSets.flat().map((example, index) => {
+    if (!example || typeof example !== 'object' || Array.isArray(example)
+      || typeof example.fingerprint !== 'string' || !example.fingerprint) {
+      throw new TypeError(`Dataset example ${index} requires a fingerprint`);
+    }
+    return redactValue(example);
+  });
+  return deduplicateDataset(examples);
+}
+
 function outputPreview(value) {
   if (typeof value === 'string') return redactText(value, 500);
   if (value && typeof value === 'object' && !Array.isArray(value)) {

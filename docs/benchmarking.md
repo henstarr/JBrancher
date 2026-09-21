@@ -69,7 +69,10 @@ The dataset curation benchmark measures a separate property: repeated local
 episodes remain available as evidence, while the portable export collapses
 duplicate task/action fingerprints and preserves aggregate outcome metadata.
 It uses the checked-in SWE-bench-derived fixture and does not claim patch
-resolution.
+resolution. It also splits the export into two simulated machine-local shards,
+merges them in memory, and verifies that aggregate evidence is preserved; this
+is the same operation exposed by `jbrancher dataset --input ...` and does not
+use an external database.
 
 The paired cost fixture uses the same task set, actor, and completion oracle for
 actor-only, rules-only, and JBrancher arms. It reports task success, actor and

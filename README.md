@@ -489,6 +489,21 @@ portable `dataset.jsonl`, exposes first-observation candidates, and promotes
 only safe read-only candidates after the configured repeated evidence. It never
 needs the TypeSafe key or an external database.
 
+To build a portable dataset from multiple local harnesses, merge explicitly
+exported redacted JSONL files. This does not change route status:
+
+```sh
+npx jbrancher dataset \
+  --input machine-a/.jbrancher/dataset.jsonl \
+  --input machine-b/.jbrancher/dataset.jsonl \
+  --dedupe \
+  --output shared-dataset.jsonl
+```
+
+The merge validates and re-redacts each row, keeps one representative per
+trajectory fingerprint, and preserves aggregate observations. Imported rows are
+data only; review or relearn them separately before enabling execution.
+
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
 
 ```sh

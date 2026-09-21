@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 
-import { resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createJBrancher } from '../src/index.js';
 import { createJevEvaluator } from '../src/jev.js';
-import { createLocalLearningStore, refreshAndPromoteReadOnly } from '../src/learning.js';
+import { createLocalLearningStore, mergeDatasetExamples, redactValue, refreshAndPromoteReadOnly } from '../src/learning.js';
 import { loadDotEnv } from '../src/env.js';
 import { createJBrancherServer } from '../src/server.js';
 import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
@@ -12,12 +13,23 @@ import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --mode shadow|adaptive --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow|adaptive] [--max-evaluations 25] -- [Claude arguments]');
-  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only] [--dedupe]\n  Writes dataset.jsonl without changing route status. --dedupe writes dataset-curated.jsonl and keeps one representative per trajectory fingerprint with aggregate evidence.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi route preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787 [--learning-dir .jbrancher]\n  POST /v1/decide with task, state, history, and candidates\n  POST /v1/workflow with task, state, history, and candidateSteps\n  POST /v1/episodes to record an open-world harness episode\n  GET  /health, /stats, or /v1/learning\n  --learning-dir also enables ingestion-only mode without a Jev key\n  --learning-allow-verified enables postcondition-certified write promotion\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export or merge the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only] [--dedupe]\n  Writes dataset.jsonl without changing route status. --dedupe writes dataset-curated.jsonl and keeps one representative per trajectory fingerprint with aggregate evidence.\n  jbrancher dataset --input machine-a.jsonl --input machine-b.jsonl [--output merged.jsonl] [--dedupe]\n  Merges explicitly exported redacted datasets locally; imported examples never promote executable routes.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi route preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787 [--learning-dir .jbrancher]\n  POST /v1/decide with task, state, history, and candidates\n  POST /v1/workflow with task, state, history, and candidateSteps\n  POST /v1/episodes to record an open-world harness episode\n  GET  /health, /stats, or /v1/learning\n  --learning-dir also enables ingestion-only mode without a Jev key\n  --learning-allow-verified enables postcondition-certified write promotion\n`);
 }
 
 function flag(name, fallback) {
   const index = process.argv.indexOf(name);
   return index === -1 ? fallback : process.argv[index + 1] ?? fallback;
+}
+
+function repeatedFlag(name) {
+  const values = [];
+  for (let index = 0; index < process.argv.length; index++) {
+    if (process.argv[index] !== name) continue;
+    const value = process.argv[index + 1];
+    if (!value || value.startsWith('--')) throw new Error(`${name} requires a value`);
+    values.push(value);
+  }
+  return values;
 }
 
 async function proxy() {
@@ -119,6 +131,52 @@ async function dataset() {
   const directory = resolve(process.cwd(), flag('--dir', '.jbrancher'));
   const includeUnknown = !process.argv.includes('--success-only');
   const deduplicate = process.argv.includes('--dedupe') || process.argv.includes('--unique');
+  const inputPaths = repeatedFlag('--input');
+  if (inputPaths.length > 0) {
+    const imported = [];
+    for (const inputPath of inputPaths) {
+      const absolutePath = resolve(process.cwd(), inputPath);
+      const contents = await readFile(absolutePath, 'utf8');
+      for (const [lineNumber, line] of contents.split(/\r?\n/).entries()) {
+        if (!line.trim()) continue;
+        let example;
+        try {
+          example = JSON.parse(line);
+        } catch (error) {
+          throw new Error(`Invalid JSON in ${absolutePath}:${lineNumber + 1}: ${error.message}`);
+        }
+        imported.push(example);
+      }
+    }
+    const safeExamples = imported.map((example, index) => {
+      if (!example || typeof example !== 'object' || Array.isArray(example)
+        || typeof example.fingerprint !== 'string' || !example.fingerprint) {
+        throw new Error(`Dataset example ${index} requires a fingerprint`);
+      }
+      return redactValue(example);
+    });
+    const examples = deduplicate
+      ? mergeDatasetExamples([safeExamples])
+      : safeExamples;
+    const outputPath = resolve(process.cwd(), flag('--output', join(directory,
+      deduplicate ? 'dataset-curated-merged.jsonl' : 'dataset-merged.jsonl')));
+    await mkdir(dirname(outputPath), { recursive: true });
+    await writeFile(outputPath, examples.map(example => JSON.stringify(example)).join('\n')
+      + (examples.length ? '\n' : ''), 'utf8');
+    console.log(JSON.stringify({
+      inputs: inputPaths.map(inputPath => resolve(process.cwd(), inputPath)),
+      inputExamples: safeExamples.length,
+      datasetExamples: examples.length,
+      deduplicated: deduplicate,
+      evidenceObservations: deduplicate
+        ? examples.reduce((total, example) => total + (example.evidence?.observations || 0), 0)
+        : null,
+      reusableExamples: examples.filter(example => example.reusable).length,
+      datasetPath: outputPath,
+      routesChanged: false
+    }, null, 2));
+    return;
+  }
   const store = createLocalLearningStore({ directory });
   const traces = await store.readTraces();
   const exported = await store.writeDataset({ includeUnknown, deduplicate });

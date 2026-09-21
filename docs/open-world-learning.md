@@ -78,6 +78,23 @@ append-only `.jbrancher/dataset.jsonl` remains safe for new episodes. The
 curated export is still local and redacted; sharing it with a central dataset
 is an explicit, opt-in step outside JBrancher's runtime.
 
+To combine exports from multiple local workspaces, copy the redacted JSONL files
+to one machine and merge them explicitly:
+
+```sh
+npx jbrancher dataset \
+  --input machine-a/.jbrancher/dataset.jsonl \
+  --input machine-b/.jbrancher/dataset.jsonl \
+  --dedupe \
+  --output shared-dataset.jsonl
+```
+
+The command validates each row, redacts again at the merge boundary, collapses
+duplicate fingerprints, and preserves aggregate evidence. It writes only the
+requested dataset file: imported examples do not mutate local routes or become
+executable without a separate, reviewed learning step. This gives teams a
+portable dataset-building path without requiring a hosted database.
+
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
 by the learning store. Generic runtime decisions also retain bounded usage
