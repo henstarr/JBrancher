@@ -243,6 +243,12 @@ The latest checked-in live sample is summarized in
 coverage. Install the official evaluator wrapper separately when preparing a
 Docker-backed run:
 
+The newest two-task live sample is summarized in
+[docs/live-learning-2026-09-21.md](live-learning-2026-09-21.md). It reduced
+Jev calls from 8 to 4 and preserved 100% fixture success. With explicitly
+supplied actor-token and provider-rate assumptions, modeled provider cost fell
+from $0.060000 to $0.001301; the assumed actor usage is not provider telemetry.
+
 The latest paired sample, which combines observed Jev usage with explicitly
 supplied actor assumptions, is summarized in
 [docs/live-paired-2026-09-20.md](live-paired-2026-09-20.md). It reduced both
