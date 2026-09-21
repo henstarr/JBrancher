@@ -443,6 +443,9 @@ The latest three-task sample is summarized in
 [docs/live-pi-3tasks-2026-09-20.md](live-pi-3tasks-2026-09-20.md), and the full
 14-task result is in
 [docs/live-pi-14tasks-2026-09-20.md](live-pi-14tasks-2026-09-20.md).
+The latest one-task rerun, including observed Jev usage and 100% verified
+coverage, is in
+[docs/live-pi-learning-2026-09-21.md](live-pi-learning-2026-09-21.md).
 
 The fixture compares three controls:
 

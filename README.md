@@ -920,6 +920,8 @@ The latest three-task paired live Jev run is recorded in
 [docs/live-jev-3tasks-2026-09-21.md](docs/live-jev-3tasks-2026-09-21.md).
 The latest three-task Pi preference-learning run is recorded in
 [docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
+The latest one-task live Pi rerun is recorded in
+[docs/live-pi-learning-2026-09-21.md](docs/live-pi-learning-2026-09-21.md).
 The full 14-task Choice-evaluator run is recorded in
 [docs/live-pi-14tasks-2026-09-20.md](docs/live-pi-14tasks-2026-09-20.md).
 
