@@ -132,6 +132,32 @@ export function createOpenWorldLearner({
       counts[key] = (counts[key] || 0) + 1;
       return counts;
     }, {});
+    const replayTelemetry = routes.map(route => {
+      const successfulReplays = Number.isSafeInteger(route.successfulReplays)
+        ? route.successfulReplays : 0;
+      const failures = Number.isSafeInteger(route.failures) ? route.failures : 0;
+      const replayAttempts = successfulReplays + failures;
+      const actionCount = Array.isArray(route.action?.actions)
+        ? route.action.actions.length
+        : route.action?.toolName ? 1 : 0;
+      return {
+        id: route.id,
+        status: route.status,
+        safety: route.safety,
+        observations: Number.isSafeInteger(route.observations) ? route.observations : 0,
+        actionCount,
+        successfulReplays,
+        failures,
+        replayAttempts,
+        replaySuccessRate: replayAttempts === 0 ? null : Number((successfulReplays / replayAttempts).toFixed(3)),
+        estimatedFrontierStepsAvoided: successfulReplays * actionCount,
+        ...(route.lastReplayAt ? { lastReplayAt: route.lastReplayAt } : {}),
+        ...(route.lastFailureAt ? { lastFailureAt: route.lastFailureAt } : {})
+      };
+    });
+    const replayAttempts = replayTelemetry.reduce((total, route) => total + route.replayAttempts, 0);
+    const successfulReplays = replayTelemetry.reduce((total, route) => total + route.successfulReplays, 0);
+    const replayFailures = replayTelemetry.reduce((total, route) => total + route.failures, 0);
     return {
       directory: learningStore.directory,
       traces: traces.length,
@@ -140,7 +166,16 @@ export function createOpenWorldLearner({
       activeRoutes: routes.filter(route => route.status === 'active').length,
       candidates: routes.filter(route => route.status === 'candidate').length,
       quarantinedRoutes: routes.filter(route => route.status === 'quarantined').length,
-      successfulReplays: routes.reduce((total, route) => total + (Number.isSafeInteger(route.successfulReplays) ? route.successfulReplays : 0), 0),
+      successfulReplays,
+      replayTelemetry,
+      replay: {
+        attempts: replayAttempts,
+        successes: successfulReplays,
+        failures: replayFailures,
+        successRate: replayAttempts === 0 ? null : Number((successfulReplays / replayAttempts).toFixed(3)),
+        activeRoutesWithReplays: replayTelemetry.filter(route => route.status === 'active' && route.successfulReplays > 0).length,
+        estimatedFrontierStepsAvoided: replayTelemetry.reduce((total, route) => total + route.estimatedFrontierStepsAvoided, 0)
+      },
       outcomes,
       resolutions
     };

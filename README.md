@@ -320,6 +320,9 @@ promotion.
 
 Active routes retain local replay telemetry (`successfulReplays` and
 `lastReplayAt`) so repeated reuse can be measured without a hosted service.
+`learner.snapshot()` also exposes `replay.successRate`, replay failures,
+quarantine state, and estimated frontier steps avoided for the whole store and
+for each route.
 
 If a learned step executes but the postcondition rejects it, JBrancher
 quarantines the route and gives the frontier actor a recovery turn in the same

@@ -28,7 +28,51 @@ test('open-world learner records any unmatched episode and promotes repeated saf
     assert.equal(routes[0].status, 'active');
     assert.equal(dataset.length, 2);
     assert.ok(dataset.every(example => example.routeResolution === 'unmatched'));
-    assert.deepEqual((await learner.snapshot()).resolutions, { unmatched: 2 });
+    const snapshot = await learner.snapshot();
+    assert.deepEqual(snapshot.resolutions, { unmatched: 2 });
+    assert.deepEqual(snapshot.replay, {
+      attempts: 0,
+      successes: 0,
+      failures: 0,
+      successRate: null,
+      activeRoutesWithReplays: 0,
+      estimatedFrontierStepsAvoided: 0
+    });
+    assert.equal(snapshot.replayTelemetry[0].observations, 2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('open-world snapshot reports replay value and quarantined failures', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-discovery-telemetry-'));
+  try {
+    const learner = createOpenWorldLearner({ directory });
+    for (const id of ['first', 'second']) {
+      const episode = learner.begin({ task: 'inspect package.json', routeResolution: 'unmatched' });
+      episode.recordToolCall({ toolCallId: id, toolName: 'read', input: { path: 'package.json' } });
+      episode.recordToolResult({ toolCallId: id, isError: false, content: [{ type: 'text', text: 'ok' }] });
+      await episode.finish({ outcome: 'success' });
+    }
+    const route = (await learner.store.readRoutes())[0];
+    await learner.store.recordRouteSuccess(route.id);
+    let snapshot = await learner.snapshot();
+    assert.deepEqual(snapshot.replay, {
+      attempts: 1,
+      successes: 1,
+      failures: 0,
+      successRate: 1,
+      activeRoutesWithReplays: 1,
+      estimatedFrontierStepsAvoided: 1
+    });
+    assert.equal(snapshot.replayTelemetry[0].replaySuccessRate, 1);
+
+    await learner.store.recordRouteFailure(route.id, { reason: 'capability changed' });
+    snapshot = await learner.snapshot();
+    assert.equal(snapshot.replay.failures, 1);
+    assert.equal(snapshot.replay.successRate, 0.5);
+    assert.equal(snapshot.replayTelemetry[0].status, 'quarantined');
+    assert.equal(snapshot.replayTelemetry[0].failures, 1);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -50,4 +94,3 @@ test('open-world learner keeps no-tool frontier work as demand evidence', async 
     await rm(directory, { recursive: true, force: true });
   }
 });
-

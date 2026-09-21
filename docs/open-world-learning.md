@@ -71,9 +71,11 @@ an operator explicitly re-promotes it, even if new traces arrive.
 Use `await learner.learn()` after importing or editing traces, and
 `await learner.snapshot()` to expose dataset demand, outcome, route-resolution,
 candidate, active-route, quarantine, and successful-replay counts in a UI or
-benchmark report. Active route records also retain `successfulReplays` and
-`lastReplayAt`, so a local harness can measure whether a promoted shortcut is
-actually earning reuse rather than merely accumulating observations.
+benchmark report. The snapshot also includes a compact `replay` summary and
+per-route `replayTelemetry`: replay attempts, success rate, failures,
+quarantine state, and estimated frontier steps avoided. This lets a local
+harness measure whether a promoted shortcut is actually earning reuse rather
+than merely accumulating observations.
 
 No Jev request is required to capture an unknown episode. Jev can remain a
 bounded evaluator for registered candidates; the frontier actor handles the

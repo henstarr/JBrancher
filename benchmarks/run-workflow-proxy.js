@@ -148,6 +148,7 @@ try {
     datasetExamples: snapshot.traces,
     activeRoutes: snapshot.activeRoutes,
     successfulReplays: snapshot.successfulReplays,
+    replay: snapshot.replay,
     successRate: rows.every(row => row.attempts.every(attempt => attempt.correct)) ? 1 : 0,
     rows
   };
@@ -161,6 +162,8 @@ try {
     assert.equal(report.successRate, 1);
     assert.equal(report.learnedReplays, instances.length * (repetitions - 2));
     assert.equal(report.successfulReplays, report.learnedReplays);
+    assert.equal(report.replay.successRate, 1);
+    assert.equal(report.replay.estimatedFrontierStepsAvoided, report.actorStepsAvoided);
     assert.ok(report.actorStepReduction >= 0.5);
   }
   console.log(JSON.stringify(report, null, 2));

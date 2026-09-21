@@ -10,6 +10,8 @@ used the local `/v1/workflow` endpoint with per-step authorization catalogs.
 | Actor steps | 112 | 56 |
 | Synthetic provider tokens | 217,280 | 108,640 |
 | Learned workflow replays | — | 28 |
+| Replay success rate | — | 100% |
+| Estimated frontier steps avoided | — | 56 |
 | Workflow route coverage | — | 100% |
 | Task success | — | 100% |
 
@@ -17,6 +19,10 @@ The run recorded 56 local episodes, promoted 14 workflows, and replayed 28
 workflows without actor steps. The endpoint abstained during every open-world
 warm-up and returned a learned workflow only when both actions were present in
 the host-supplied capability catalog.
+
+The local learning snapshot reports replay attempts, replay success rate, and
+estimated frontier steps avoided per route, making the result auditable without
+a hosted telemetry service.
 
 This is a routing/replay efficiency benchmark using deterministic read
 execution, not an official SWE-bench patch-resolution score.
