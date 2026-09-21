@@ -242,6 +242,17 @@ The cold-to-warm loop can be checked without a provider key:
 npm run bench:discovery -- --assert
 ```
 
+To measure portable dataset curation against the checked-in SWE-bench-derived
+fixture, run:
+
+```sh
+npm run bench:dataset -- --assert
+```
+
+This keeps every raw observation for learning evidence while collapsing
+repeated task/action trajectories into one export row with aggregate outcome
+and source counts.
+
 For a generic harness or offline inspection, export the same local dataset
 without changing route status:
 
@@ -249,6 +260,9 @@ without changing route status:
 npx jbrancher dataset --dir .jbrancher
 # Omit rejected/unknown episodes when needed:
 npx jbrancher dataset --dir .jbrancher --success-only
+# Keep one representative per repeated task/action trajectory while retaining
+# aggregate evidence counts:
+npx jbrancher dataset --dir .jbrancher --dedupe
 ```
 
 ### Wrap your own harness

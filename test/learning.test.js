@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -332,6 +332,43 @@ test('learning proposals ignore failed traces and unsafe actions', () => {
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].safety, 'side-effect-or-unknown');
   assert.match(redactText('Authorization: Bearer abcdefghijklmnop'), /REDACTED/);
+});
+
+test('curated dataset export collapses duplicate trajectories but preserves evidence counts', () => {
+  const examples = [
+    traceToDatasetExample({
+      id: 'unknown',
+      task: 'inspect package.json',
+      source: 'pi',
+      routeResolution: 'unmatched',
+      outcome: 'unknown',
+      createdAt: '2026-09-20T00:00:00.000Z',
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    }),
+    traceToDatasetExample({
+      id: 'success',
+      task: 'inspect package.json',
+      source: 'harbor',
+      routeResolution: 'unmatched',
+      outcome: 'success',
+      createdAt: '2026-09-20T00:01:00.000Z',
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    })
+  ];
+
+  const [curated] = deduplicateDataset(examples);
+  assert.equal(curated.schemaVersion, 2);
+  assert.equal(curated.exampleId, `curated-${examples[0].fingerprint}`);
+  assert.equal(curated.outcome, 'success');
+  assert.equal(curated.reusable, true);
+  assert.deepEqual(curated.evidence, {
+    observations: 2,
+    outcomes: { unknown: 1, success: 1 },
+    routeResolutions: { unmatched: 2 },
+    sources: ['harbor', 'pi']
+  });
+  assert.equal(curated.firstSeen, '2026-09-20T00:00:00.000Z');
+  assert.equal(curated.lastSeen, '2026-09-20T00:01:00.000Z');
 });
 
 test('unsafe candidates require explicit force to promote', async () => {

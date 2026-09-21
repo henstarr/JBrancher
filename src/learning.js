@@ -445,11 +445,95 @@ export function traceToDatasetExample(trace) {
   };
 }
 
-export function buildDataset(traces, { includeUnknown = true } = {}) {
+export function buildDataset(traces, { includeUnknown = true, deduplicate = false } = {}) {
   if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
-  return traces
+  const examples = traces
     .filter(trace => includeUnknown || trace?.outcome === 'success')
     .map(traceToDatasetExample);
+  return deduplicate ? deduplicateDataset(examples) : examples;
+}
+
+function incrementCount(counts, key) {
+  const normalized = typeof key === 'string' && key ? key : 'unknown';
+  counts[normalized] = (counts[normalized] || 0) + 1;
+}
+
+function datasetExampleRank(example) {
+  const outcomeRank = { success: 3, unknown: 2, failure: 1 }[example?.outcome] || 0;
+  const reusableRank = example?.reusable ? 1 : 0;
+  const stepRank = Array.isArray(example?.steps) ? example.steps.length : 0;
+  return [outcomeRank, reusableRank, stepRank];
+}
+
+function isHigherQualityExample(candidate, current) {
+  const left = datasetExampleRank(candidate);
+  const right = datasetExampleRank(current);
+  for (let index = 0; index < left.length; index++) {
+    if (left[index] !== right[index]) return left[index] > right[index];
+  }
+  // Keep the earliest representative when quality is tied. This makes the
+  // curated export stable as new duplicate evidence arrives.
+  return String(candidate?.createdAt || '') < String(current?.createdAt || '');
+}
+
+/**
+ * Collapse duplicate trajectory fingerprints for portable exports.
+ *
+ * Raw traces remain append-only because route mining needs repeated evidence.
+ * A curated dataset keeps one representative row per task/action fingerprint
+ * and records the repeated observations as redacted aggregate evidence. This
+ * prevents repeated local use from overweighting a single workflow during
+ * offline evaluation or later opt-in dataset sharing.
+ */
+export function deduplicateDataset(examples) {
+  if (!Array.isArray(examples)) throw new TypeError('examples must be an array');
+  const groups = new Map();
+  for (const example of examples) {
+    if (!example || typeof example !== 'object' || typeof example.fingerprint !== 'string') {
+      throw new TypeError('Each dataset example requires a fingerprint');
+    }
+    const fingerprint = example.fingerprint;
+    const existing = groups.get(fingerprint);
+    if (!existing) {
+      const representative = structuredClone(example);
+      representative.schemaVersion = 2;
+      representative.exampleId = `curated-${fingerprint}`;
+      representative.evidence = {
+        observations: 1,
+        outcomes: { [example.outcome || 'unknown']: 1 },
+        routeResolutions: { [example.routeResolution || 'unknown']: 1 },
+        sources: example.source ? [example.source] : []
+      };
+      representative.firstSeen = example.createdAt || null;
+      representative.lastSeen = example.createdAt || null;
+      groups.set(fingerprint, representative);
+      continue;
+    }
+
+    existing.evidence.observations += 1;
+    incrementCount(existing.evidence.outcomes, example.outcome);
+    incrementCount(existing.evidence.routeResolutions, example.routeResolution);
+    if (example.source && !existing.evidence.sources.includes(example.source)) {
+      existing.evidence.sources.push(example.source);
+      existing.evidence.sources.sort();
+    }
+    const timestamps = [existing.firstSeen, example.createdAt].filter(Boolean).sort();
+    if (timestamps.length > 0) existing.firstSeen = timestamps[0];
+    const latest = [existing.lastSeen, example.createdAt].filter(Boolean).sort();
+    if (latest.length > 0) existing.lastSeen = latest.at(-1);
+    if (isHigherQualityExample(example, existing)) {
+      const evidence = existing.evidence;
+      const firstSeen = existing.firstSeen;
+      const lastSeen = existing.lastSeen;
+      Object.assign(existing, structuredClone(example));
+      existing.schemaVersion = 2;
+      existing.exampleId = `curated-${fingerprint}`;
+      existing.evidence = evidence;
+      existing.firstSeen = firstSeen;
+      existing.lastSeen = lastSeen;
+    }
+  }
+  return [...groups.values()].sort((left, right) => left.fingerprint.localeCompare(right.fingerprint));
 }
 
 function outputPreview(value) {

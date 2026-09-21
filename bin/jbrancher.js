@@ -12,7 +12,7 @@ import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 function printHelp() {
   console.log('Codex batch: jbrancher wrap codex --mode shadow|adaptive --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow|adaptive] [--max-evaluations 25] -- [Claude arguments]');
-  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only]\n  Writes dataset.jsonl without changing route status.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi route preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787 [--learning-dir .jbrancher]\n  POST /v1/decide with task, state, history, and candidates\n  POST /v1/workflow with task, state, history, and candidateSteps\n  POST /v1/episodes to record an open-world harness episode\n  GET  /health, /stats, or /v1/learning\n  --learning-dir also enables ingestion-only mode without a Jev key\n  --learning-allow-verified enables postcondition-certified write promotion\n`);
+  console.log(`JBrancher\n\nCommands:\n  demo       Run the offline demo\n  doctor     Check local runtime and credential configuration\n  dataset    Export the local redacted fallback dataset\n  preferences Inspect local Pi route preferences\n  learn      Mine local traces and refresh safe learned routes\n  proxy      Start the language-agnostic decision service\n  live-check Run three bounded synthetic Jev decisions\n\nLearning:\n  jbrancher dataset [--dir .jbrancher] [--success-only] [--dedupe]\n  Writes dataset.jsonl without changing route status. --dedupe keeps one representative per trajectory fingerprint and aggregates repeated evidence.\n  jbrancher preferences [--dir .jbrancher]\n  Prints local Pi route preference status without changing it.\n  jbrancher learn [--dir .jbrancher]\n  Mines candidates and promotes only safe read-only routes.\n\nProxy:\n  jbrancher proxy --port 8787 [--learning-dir .jbrancher]\n  POST /v1/decide with task, state, history, and candidates\n  POST /v1/workflow with task, state, history, and candidateSteps\n  POST /v1/episodes to record an open-world harness episode\n  GET  /health, /stats, or /v1/learning\n  --learning-dir also enables ingestion-only mode without a Jev key\n  --learning-allow-verified enables postcondition-certified write promotion\n`);
 }
 
 function flag(name, fallback) {
@@ -118,9 +118,10 @@ async function learn() {
 async function dataset() {
   const directory = resolve(process.cwd(), flag('--dir', '.jbrancher'));
   const includeUnknown = !process.argv.includes('--success-only');
+  const deduplicate = process.argv.includes('--dedupe') || process.argv.includes('--unique');
   const store = createLocalLearningStore({ directory });
   const traces = await store.readTraces();
-  const exported = await store.writeDataset({ includeUnknown });
+  const exported = await store.writeDataset({ includeUnknown, deduplicate });
   const outcomes = traces.reduce((counts, trace) => {
     const outcome = trace.outcome || 'unknown';
     counts[outcome] = (counts[outcome] || 0) + 1;
@@ -135,6 +136,10 @@ async function dataset() {
     directory,
     traces: traces.length,
     datasetExamples: exported.examples.length,
+    deduplicated: deduplicate,
+    evidenceObservations: deduplicate
+      ? exported.examples.reduce((total, example) => total + (example.evidence?.observations || 0), 0)
+      : null,
     reusableExamples: exported.examples.filter(example => example.reusable).length,
     outcomes,
     resolutions,

@@ -61,6 +61,21 @@ await learner.recordEpisode({
 `recordEpisode` performs the same redaction, durable append, dataset export,
 candidate mining, and optional promotion as the lower-level lifecycle API.
 
+The append-only trace file intentionally keeps every observation because
+repetition is evidence for promotion. For a portable training or evaluation
+export, curate repeated trajectories instead:
+
+```sh
+npx jbrancher dataset --dir .jbrancher --dedupe
+```
+
+Curated rows keep one representative per stable task/action fingerprint and
+add aggregate evidence counts for outcomes, route resolutions, and sources.
+This prevents a frequently repeated local workflow from overweighting a shared
+dataset while preserving the original traces for future route mining. The
+curated export is still local and redacted; sharing it with a central dataset
+is an explicit, opt-in step outside JBrancher's runtime.
+
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
 by the learning store.

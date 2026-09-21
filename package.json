@@ -30,6 +30,7 @@
     "bench:tokens": "node benchmarks/run-token-optimization.js",
     "bench:learning": "node benchmarks/run-learning.js",
     "bench:discovery": "node benchmarks/run-discovery.js",
+    "bench:dataset": "node benchmarks/run-dataset-curation.js",
     "bench:proxy": "node benchmarks/run-proxy-learning.js",
     "bench:workflow": "node benchmarks/run-workflow-proxy.js",
     "bench:harbor": "node benchmarks/run-harbor-style.js",

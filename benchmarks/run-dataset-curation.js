@@ -1,0 +1,69 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createLocalLearningStore } from '../src/learning.js';
+
+const fixture = JSON.parse(await readFile(new URL('./fixtures/swebench-lite-mini.json', import.meta.url), 'utf8'));
+
+function integerFlag(name, fallback, minimum) {
+  const index = process.argv.indexOf(name);
+  const value = Number(index === -1 ? fallback : process.argv[index + 1]);
+  if (!Number.isSafeInteger(value) || value < minimum) throw new Error(`${name} must be an integer >= ${minimum}`);
+  return value;
+}
+
+const repetitions = integerFlag('--repetitions', 4, 1);
+const instanceCount = integerFlag('--instances', fixture.instances.length, 1);
+const shouldAssert = process.argv.includes('--assert');
+const instances = fixture.instances.slice(0, Math.min(instanceCount, fixture.instances.length));
+const directory = await mkdtemp(join(tmpdir(), 'jbrancher-dataset-curation-'));
+
+try {
+  const store = createLocalLearningStore({ directory });
+  for (const instance of instances) {
+    const task = `${instance.instance_id}: inspect the failing test and repository overview`;
+    const toolCalls = [
+      { toolCallId: 'test', toolName: 'read', input: { path: instance.fail_to_pass[0] }, ok: true, output: 'test output' },
+      { toolCallId: 'readme', toolName: 'read', input: { path: 'README.md' }, ok: true, output: 'repository overview' }
+    ];
+    for (let repetition = 0; repetition < repetitions; repetition++) {
+      await store.appendTrace({
+        task,
+        source: repetition % 2 === 0 ? 'pi' : 'harbor',
+        routeResolution: 'unmatched',
+        metadata: { instanceId: instance.instance_id, repetition },
+        toolCalls,
+        outcome: 'success'
+      });
+    }
+  }
+
+  const raw = await store.writeDataset();
+  const curated = await store.writeDataset({ deduplicate: true });
+  const report = {
+    benchmark: 'JBrancher local dataset curation',
+    source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
+    rawExamples: raw.examples.length,
+    curatedExamples: curated.examples.length,
+    duplicateRowsRemoved: raw.examples.length - curated.examples.length,
+    curationRatio: Number((1 - curated.examples.length / raw.examples.length).toFixed(3)),
+    evidenceObservations: curated.examples.reduce((total, example) => total + example.evidence.observations, 0),
+    reusableCuratedExamples: curated.examples.filter(example => example.reusable).length,
+    uniqueFingerprints: new Set(curated.examples.map(example => example.fingerprint)).size
+  };
+
+  if (shouldAssert) {
+    assert.equal(report.rawExamples, instances.length * repetitions);
+    assert.equal(report.curatedExamples, instances.length);
+    assert.equal(report.evidenceObservations, report.rawExamples);
+    assert.equal(report.uniqueFingerprints, report.curatedExamples);
+    assert.equal(report.reusableCuratedExamples, report.curatedExamples);
+    assert.equal(report.curationRatio, Number((1 - 1 / repetitions).toFixed(3)));
+  }
+  console.log(JSON.stringify(report, null, 2));
+} finally {
+  await rm(directory, { recursive: true, force: true });
+}

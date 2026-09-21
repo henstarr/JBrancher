@@ -25,10 +25,17 @@ npm run bench:proxy -- --assert
 npm run bench:workflow -- --assert
 npm run bench:harbor -- --assert
 npm run bench:adaptation -- --assert
+npm run bench:dataset -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
+
+The dataset curation benchmark measures a separate property: repeated local
+episodes remain available as evidence, while the portable export collapses
+duplicate task/action fingerprints and preserves aggregate outcome metadata.
+It uses the checked-in SWE-bench-derived fixture and does not claim patch
+resolution.
 
 The paired cost fixture uses the same task set, actor, and completion oracle for
 actor-only, rules-only, and JBrancher arms. It reports task success, actor and
