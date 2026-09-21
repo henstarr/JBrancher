@@ -265,6 +265,9 @@ npx jbrancher dataset --dir .jbrancher --success-only
 npx jbrancher dataset --dir .jbrancher --dedupe
 ```
 
+The deduplicated export is written to `.jbrancher/dataset-curated.jsonl` so
+new frontier episodes can continue appending safely to `.jbrancher/dataset.jsonl`.
+
 ### Wrap your own harness
 
 Install JBrancher directly from GitHub:

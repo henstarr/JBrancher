@@ -618,11 +618,12 @@ export function createEpisodeRecorder({ store, task, cwd = '', source = 'harness
   };
 }
 
-export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl', routeFile = 'routes.json', datasetFile = 'dataset.jsonl', preferenceFile = 'preferences.json' } = {}) {
+export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl', routeFile = 'routes.json', datasetFile = 'dataset.jsonl', curatedDatasetFile = 'dataset-curated.jsonl', preferenceFile = 'preferences.json' } = {}) {
   if (typeof directory !== 'string' || !directory) throw new TypeError('A learning directory is required');
   const tracesPath = join(directory, traceFile);
   const routesPath = join(directory, routeFile);
   const datasetPath = join(directory, datasetFile);
+  const curatedDatasetPath = join(directory, curatedDatasetFile);
   const preferencesPath = join(directory, preferenceFile);
   const lockPath = join(directory, '.learning.lock');
   const lockWaitTimeoutMs = 30_000;
@@ -838,10 +839,11 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
   async function writeDatasetUnlocked(options = {}) {
     await ensure();
     const examples = buildDataset(await readTraces(), options);
-    const tempPath = `${datasetPath}.tmp-${process.pid}-${randomUUID()}`;
+    const outputPath = options.deduplicate ? curatedDatasetPath : datasetPath;
+    const tempPath = `${outputPath}.tmp-${process.pid}-${randomUUID()}`;
     await writeFile(tempPath, examples.map(example => JSON.stringify(example)).join('\n') + (examples.length ? '\n' : ''), 'utf8');
-    await rename(tempPath, datasetPath);
-    return { path: datasetPath, examples };
+    await rename(tempPath, outputPath);
+    return { path: outputPath, examples };
   }
 
   async function writeDataset(options = {}) {
@@ -922,7 +924,7 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
   }
 
   return {
-    directory, tracesPath, routesPath, datasetPath, preferencesPath,
+    directory, tracesPath, routesPath, datasetPath, curatedDatasetPath, preferencesPath,
     appendTrace, appendDatasetExample, readTraces, readRoutes, writeRoutes,
     writeDataset, refreshCandidates, promote, recordRouteFailure, recordRouteSuccess,
     readPreferences, writePreferences, findPreference, recordPreferenceSuccess,

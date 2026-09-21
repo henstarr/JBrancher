@@ -67,6 +67,32 @@ test('a single successful fallback becomes a candidate before promotion evidence
   }
 });
 
+test('curated exports stay separate from the append-only live dataset', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-curated-file-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const trace = {
+      task: 'read README.md',
+      source: 'test',
+      routeResolution: 'unmatched',
+      outcome: 'success',
+      toolCalls: [{ toolName: 'read', input: { path: 'README.md' }, ok: true }]
+    };
+    await store.appendTrace(trace);
+    const curated = await store.writeDataset({ deduplicate: true });
+    assert.equal(curated.path, store.curatedDatasetPath);
+    assert.notEqual(curated.path, store.datasetPath);
+    assert.equal((await readFile(store.datasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
+    assert.equal((await readFile(store.curatedDatasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
+
+    await store.appendTrace({ ...trace, id: 'second-observation' });
+    assert.equal((await readFile(store.datasetPath, 'utf8')).trim().split(/\r?\n/).length, 2);
+    assert.equal((await readFile(store.curatedDatasetPath, 'utf8')).trim().split(/\r?\n/).length, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('local learning stores serialize concurrent route mutations across store instances', async () => {
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-lock-'));
   try {

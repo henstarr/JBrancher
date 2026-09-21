@@ -48,6 +48,9 @@ try {
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
     rawExamples: raw.examples.length,
     curatedExamples: curated.examples.length,
+    rawDatasetPath: raw.path,
+    curatedDatasetPath: curated.path,
+    separateLiveAndCuratedFiles: raw.path !== curated.path,
     duplicateRowsRemoved: raw.examples.length - curated.examples.length,
     curationRatio: Number((1 - curated.examples.length / raw.examples.length).toFixed(3)),
     evidenceObservations: curated.examples.reduce((total, example) => total + example.evidence.observations, 0),
@@ -58,6 +61,7 @@ try {
   if (shouldAssert) {
     assert.equal(report.rawExamples, instances.length * repetitions);
     assert.equal(report.curatedExamples, instances.length);
+    assert.equal(report.separateLiveAndCuratedFiles, true);
     assert.equal(report.evidenceObservations, report.rawExamples);
     assert.equal(report.uniqueFingerprints, report.curatedExamples);
     assert.equal(report.reusableCuratedExamples, report.curatedExamples);

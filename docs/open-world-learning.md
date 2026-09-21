@@ -73,6 +73,8 @@ Curated rows keep one representative per stable task/action fingerprint and
 add aggregate evidence counts for outcomes, route resolutions, and sources.
 This prevents a frequently repeated local workflow from overweighting a shared
 dataset while preserving the original traces for future route mining. The
+curated export is written to `.jbrancher/dataset-curated.jsonl`; the live
+append-only `.jbrancher/dataset.jsonl` remains safe for new episodes. The
 curated export is still local and redacted; sharing it with a central dataset
 is an explicit, opt-in step outside JBrancher's runtime.
 
