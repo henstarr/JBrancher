@@ -117,6 +117,24 @@ test('local learning stores promote and quarantine exact route preferences', asy
   }
 });
 
+test('local preferences are isolated by redacted execution context', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-context-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const firstContext = { cwd: '/workspace/one', mode: 'json', providerToken: 'apikey_sensitive_value_1234567890' };
+    const secondContext = { cwd: '/workspace/two', mode: 'json', providerToken: 'apikey_sensitive_value_1234567890' };
+    await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'inspect', context: firstContext, minimumObservations: 2 });
+    await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'inspect', context: firstContext, minimumObservations: 2 });
+    assert.equal((await store.findPreference('choose a route', ['inspect'], { context: firstContext })).routeId, 'inspect');
+    assert.equal(await store.findPreference('choose a route', ['inspect'], { context: secondContext }), null);
+    assert.equal(await store.findPreference('choose a route', ['inspect']), null);
+    const persisted = JSON.stringify(await store.readPreferences());
+    assert.doesNotMatch(persisted, /workspace\/one|providerToken|apikey_sensitive_value/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('learning can replay a repeated read-only workflow with multiple steps', async () => {
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-'));
   try {

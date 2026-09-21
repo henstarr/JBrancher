@@ -132,7 +132,8 @@ export default async function jbrancherPiExtension(pi) {
       router: createPiRouter({
         routes,
         evaluate,
-        prefer: learnJevChoices ? async ({ task, matched }) => learning.findPreference(task, matched, {
+        prefer: learnJevChoices ? async ({ task, state, matched }) => learning.findPreference(task, matched, {
+          context: state,
           minimumObservations: Number(config.preferenceMinimumObservations || 2)
         }).then(preference => preference?.routeId) : undefined,
         minimumProbability: numberEnv('JBRANCHER_PI_MIN_PROBABILITY', config.minimumProbability ?? 0.7),
@@ -201,7 +202,10 @@ export default async function jbrancherPiExtension(pi) {
           await runtime.learning.store.recordRouteFailure(outcome.failedRouteId, { reason: outcome.error });
           if (runtime.learning.preferenceEnabled && typeof runtime.learning.store.recordPreferenceFailure === 'function') {
             await runtime.learning.store.recordPreferenceFailure({
-              task: event.text, routeId: outcome.failedRouteId, reason: outcome.error
+              task: event.text,
+              routeId: outcome.failedRouteId,
+              context: { cwd: ctx.cwd, mode: ctx.mode },
+              reason: outcome.error
             });
           }
           await load(ctx.cwd);
@@ -230,6 +234,7 @@ export default async function jbrancherPiExtension(pi) {
         await runtime.learning.store.recordPreferenceSuccess({
           task: event.text,
           routeId: outcome.routeId,
+          context: { cwd: ctx.cwd, mode: ctx.mode },
           minimumObservations: Number(config.preferenceMinimumObservations || 2)
         });
       } catch (error) {

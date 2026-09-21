@@ -50,6 +50,12 @@ episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
 by the learning store.
 There is no external database requirement.
 
+Preference learning is context-scoped. When the Pi adapter learns that Jev
+usually selects a route, it stores a one-way fingerprint of the redacted
+`{ cwd, mode }` context rather than the context itself. A preference is replayed
+only in the same context; a task that arrives from a different project or mode
+returns to the normal Jev/frontier path until it earns its own evidence.
+
 ## Promotion policy
 
 The first successful unknown episode becomes a candidate. Repeated successful

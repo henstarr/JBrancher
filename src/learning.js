@@ -86,6 +86,18 @@ function hash(value) {
   return createHash('sha256').update(value).digest('hex').slice(0, 12);
 }
 
+/**
+ * Produce a non-reversible identity for the state in which a preference was
+ * observed. The raw state is deliberately not persisted: it may contain
+ * paths, prompts, or provider metadata that should stay in the harness.
+ * Undefined means "global preference" for backwards compatibility.
+ */
+export function preferenceContextFingerprint(context) {
+  if (context === undefined) return null;
+  const redacted = redactValue(context, 0, 5);
+  return hash(JSON.stringify(stable(redacted)) ?? String(redacted));
+}
+
 function actionKey(toolName, input) {
   return JSON.stringify(stable({ toolName, input: redactValue(input) }));
 }
@@ -660,7 +672,7 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     return withLock(() => writePreferencesUnlocked(preferences));
   }
 
-  async function findPreference(task, routeIds = [], { minimumObservations = 2 } = {}) {
+  async function findPreference(task, routeIds = [], { minimumObservations = 2, context } = {}) {
     if (typeof task !== 'string') throw new TypeError('task must be a string');
     if (!Array.isArray(routeIds)) throw new TypeError('routeIds must be an array');
     if (!Number.isSafeInteger(minimumObservations) || minimumObservations < 1) {
@@ -668,15 +680,19 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     }
     const normalized = normalizeTask(task);
     const allowed = new Set(routeIds.filter(routeId => typeof routeId === 'string'));
+    const contextFingerprint = preferenceContextFingerprint(context);
     const preferences = await readPreferences();
     return preferences.find(preference => preference?.status === 'active'
       && preference.taskNormalized === normalized
       && allowed.has(preference.routeId)
+      && (contextFingerprint === null
+        ? !preference.contextFingerprint
+        : preference.contextFingerprint === contextFingerprint)
       && Number.isSafeInteger(preference.observations)
       && preference.observations >= minimumObservations) || null;
   }
 
-  async function recordPreferenceSuccess({ task, routeId, minimumObservations = 2 } = {}) {
+  async function recordPreferenceSuccess({ task, routeId, context, minimumObservations = 2 } = {}) {
     if (typeof task !== 'string' || typeof routeId !== 'string' || !routeId) {
       throw new TypeError('task and routeId are required');
     }
@@ -685,16 +701,18 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     }
     return withLock(async () => {
       const taskNormalized = normalizeTask(task);
-      const id = `preference-${hash(`${taskNormalized}\n${routeId}`)}`;
+      const contextFingerprint = preferenceContextFingerprint(context);
+      const id = `preference-${hash(`${taskNormalized}\n${routeId}\n${contextFingerprint ?? 'global'}`)}`;
       const preferences = await readPreferences();
       let preference = preferences.find(item => item.id === id);
       if (!preference) {
         preference = {
-          schemaVersion: 1,
+          schemaVersion: 2,
           id,
           task: redactText(task, 4000),
           taskNormalized,
           routeId: redactText(routeId, 200),
+          ...(contextFingerprint ? { contextFingerprint } : {}),
           status: 'candidate',
           observations: 0,
           failures: 0,
@@ -713,13 +731,14 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
     });
   }
 
-  async function recordPreferenceFailure({ task, routeId, reason = '' } = {}) {
+  async function recordPreferenceFailure({ task, routeId, context, reason = '' } = {}) {
     if (typeof task !== 'string' || typeof routeId !== 'string' || !routeId) {
       throw new TypeError('task and routeId are required');
     }
     return withLock(async () => {
       const taskNormalized = normalizeTask(task);
-      const id = `preference-${hash(`${taskNormalized}\n${routeId}`)}`;
+      const contextFingerprint = preferenceContextFingerprint(context);
+      const id = `preference-${hash(`${taskNormalized}\n${routeId}\n${contextFingerprint ?? 'global'}`)}`;
       const preferences = await readPreferences();
       const preference = preferences.find(item => item.id === id);
       if (!preference) return null;

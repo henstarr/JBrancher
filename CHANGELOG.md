@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Scope local Pi route preferences to a redacted execution-context fingerprint,
+  preventing a learned choice from crossing project or mode boundaries.
+
 ## 0.1.0 - 2026-09-17
 
 - Added the initial JBrancher runtime.

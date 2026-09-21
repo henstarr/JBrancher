@@ -85,8 +85,9 @@ test('Pi extension reuses an active local Jev preference without a provider key'
     ]
   };\n`, 'utf8');
   const store = createLocalLearningStore({ directory: join(directory, '.jbrancher') });
-  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', minimumObservations: 2 });
-  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', minimumObservations: 2 });
+  const context = { cwd: directory, mode: 'json' };
+  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', context, minimumObservations: 2 });
+  await store.recordPreferenceSuccess({ task: 'choose a route', routeId: 'preferred', context, minimumObservations: 2 });
   const handlers = new Map();
   const messages = [];
   const pi = {
