@@ -601,6 +601,13 @@ keeps JBrancher telemetry separate from the evaluator input.
 
 The prediction-generation loop should log routing telemetry separately from the patch. The official harness remains the source of truth for resolution rate.
 
+The repository also records a real base-commit reproduction for
+`sqlfluff__sqlfluff-1625` in
+[docs/swebench-real-repro-2026-09-21.md](swebench-real-repro-2026-09-21.md).
+Its hidden regression test fails before the published patch and passes after it,
+which validates the task boundary without overstating it as a JBrancher or
+official SWE-bench score.
+
 ## What would count as a win?
 
 A credible result is not “Jev scored highly.” It is a paired result such as: the same task set has no statistically meaningful drop in success, while actor calls and cost per successful task decrease, or latency improves at the same success rate. If success drops, keep the mode behind a threshold or use JBrancher only for low-risk transitions.
