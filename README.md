@@ -636,16 +636,20 @@ import { createJevEvaluator } from 'jbrancher/jev';
 
 const evaluate = createJevEvaluator({
   apiKey: process.env.TYPESAFE_API_KEY,
-  model: 'jev-1.13.0'
+  model: 'jev-latest'
 });
 ```
 
-The adapter uses TypeSafe’s System One HTTP endpoint and a pinned model
-identifier. Route selection uses a Choice question with a no-match branch by
-default; pass `questionType: 'noul'` only for compatibility with older
-integrations. Set the API key locally; do not place it in traces, candidate
+The adapter uses TypeSafe’s System One HTTP endpoint. The default model is
+`jev-latest`; you can pin a concrete revision such as `jev-1.13.0` for
+reproducible experiments. Route selection uses a Choice question with a
+no-match branch by default; pass `questionType: 'noul'` only for compatibility
+with older integrations. Set the API key locally; do not place it in traces, candidate
 metadata, or commits. The network adapter is opt-in through construction and
 should be used with explicit timeouts and bounded evaluation budgets.
+Choice catalogs are capped at 254 executable candidates because JBrancher adds
+`no_match` as the 255th provider option; larger catalogs fail closed to the
+frontier path.
 
 ## Why this placement matters
 
@@ -707,6 +711,8 @@ The latest real-Codex actor-learning run is recorded in
 [docs/live-codex-2026-09-21.md](docs/live-codex-2026-09-21.md).
 The latest three-task live-Codex run is recorded in
 [docs/live-codex-3tasks-2026-09-21.md](docs/live-codex-3tasks-2026-09-21.md).
+The current `jev-latest` compatibility run is recorded in
+[docs/live-jev-latest-2026-09-21.md](docs/live-jev-latest-2026-09-21.md).
 The latest three-task Pi preference-learning run is recorded in
 [docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
 The full 14-task Choice-evaluator run is recorded in

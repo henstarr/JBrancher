@@ -176,6 +176,10 @@ The latest three-task run is in
 [docs/live-codex-3tasks-2026-09-21.md](live-codex-3tasks-2026-09-21.md); it
 reduced Codex actor calls by 50% and saved 95,717 observed provider tokens
 while preserving 100% task success and route coverage.
+The current-model compatibility run is in
+[docs/live-jev-latest-2026-09-21.md](live-jev-latest-2026-09-21.md); it used
+`jev-latest`, observed the concrete serving revision, and preserved 100% route
+coverage and task success.
 
 To exercise the same learning path through the language-agnostic HTTP proxy,
 run:

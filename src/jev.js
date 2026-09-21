@@ -1,10 +1,19 @@
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 const VERSIONED_MODEL = /^jev-\d+\.\d+\.\d+$/;
+const MODEL_ID = /^(?:jev-latest|jev-\d+\.\d+\.\d+)$/;
+const MAX_CHOICE_OPTIONS = 255;
+
+function responseMatchesRequest(body, requestedModel) {
+  if (!body?.model || body.model === requestedModel) return true;
+  // The service may resolve the stable alias to the concrete model revision
+  // that served the request. A pinned request must still match exactly.
+  return requestedModel === 'jev-latest' && VERSIONED_MODEL.test(body.model);
+}
 
 function usage(body, model, status) {
   const inputTokens = Number.isSafeInteger(body?.usage?.input_tokens) ? body.usage.input_tokens : null;
   const outputTokens = Number.isSafeInteger(body?.usage?.output_tokens) ? body.usage.output_tokens : null;
-  return { provider: 'typesafe', model, status, inputTokens, outputTokens };
+  return { provider: 'typesafe', model: body?.model || model, status, inputTokens, outputTokens };
 }
 
 function candidateNoulQuestions(count) {
@@ -43,15 +52,19 @@ function contextQuestions(count) {
 }
 
 /** Create a bounded Jev evaluator for harness-supplied candidates. */
-export function createJevEvaluator({ apiKey, model = 'jev-1.13.0', endpoint = ENDPOINT,
+export function createJevEvaluator({ apiKey, model = 'jev-latest', endpoint = ENDPOINT,
   fetchImpl = globalThis.fetch, timeoutMs = 5000, questionType = 'choice' } = {}) {
   if (typeof apiKey !== 'string' || !apiKey.trim()) throw new TypeError('A TypeSafe API key is required');
-  if (!VERSIONED_MODEL.test(model)) throw new TypeError('Use a pinned Jev model id');
+  if (!MODEL_ID.test(model)) throw new TypeError('Use jev-latest or a pinned Jev model id');
   if (typeof fetchImpl !== 'function') throw new TypeError('A fetch implementation is required');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60_000) throw new TypeError('Invalid timeout');
   if (!['choice', 'noul'].includes(questionType)) throw new TypeError('questionType must be choice or noul');
 
   return async function evaluate({ state, task, history, candidates, signal }) {
+    if (!Array.isArray(candidates)) throw new TypeError('candidates must be an array');
+    if (questionType === 'choice' && candidates.length + 1 > MAX_CHOICE_OPTIONS) {
+      throw new RangeError(`Choice supports at most ${MAX_CHOICE_OPTIONS - 1} candidates plus no_match`);
+    }
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const cancel = () => controller.abort();
@@ -71,7 +84,7 @@ export function createJevEvaluator({ apiKey, model = 'jev-1.13.0', endpoint = EN
       });
       if (!response.ok) throw new Error(`TypeSafe request failed with HTTP ${response.status}`);
       body = await response.json();
-      if (body?.model && body.model !== model) throw new Error('Jev response model mismatch');
+      if (!responseMatchesRequest(body, model)) throw new Error('Jev response model mismatch');
       if (questionType === 'noul') {
         const scores = candidates.map((_, index) => {
           const answer = body?.answers?.[`candidate_${index}`];
@@ -128,10 +141,10 @@ export function createJevEvaluator({ apiKey, model = 'jev-1.13.0', endpoint = EN
 }
 
 /** Create a bounded Jev relevance evaluator for optional context items. */
-export function createJevContextEvaluator({ apiKey, model = 'jev-1.13.0', endpoint = ENDPOINT,
+export function createJevContextEvaluator({ apiKey, model = 'jev-latest', endpoint = ENDPOINT,
   fetchImpl = globalThis.fetch, timeoutMs = 5000, maxItemChars = 512 } = {}) {
   if (typeof apiKey !== 'string' || !apiKey.trim()) throw new TypeError('A TypeSafe API key is required');
-  if (!VERSIONED_MODEL.test(model)) throw new TypeError('Use a pinned Jev model id');
+  if (!MODEL_ID.test(model)) throw new TypeError('Use jev-latest or a pinned Jev model id');
   if (typeof fetchImpl !== 'function') throw new TypeError('A fetch implementation is required');
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60_000) throw new TypeError('Invalid timeout');
   if (!Number.isSafeInteger(maxItemChars) || maxItemChars < 128 || maxItemChars > 16_000) throw new TypeError('Invalid maxItemChars');
@@ -154,7 +167,7 @@ export function createJevContextEvaluator({ apiKey, model = 'jev-1.13.0', endpoi
       });
       if (!response.ok) throw new Error(`TypeSafe request failed with HTTP ${response.status}`);
       body = await response.json();
-      if (body?.model && body.model !== model) throw new Error('Jev response model mismatch');
+      if (!responseMatchesRequest(body, model)) throw new Error('Jev response model mismatch');
       const scores = items.map((_, index) => {
         const answer = body?.answers?.[`context_${index}`];
         if (answer?.type !== 'noul' || typeof answer.noul !== 'number' || !Number.isFinite(answer.noul)

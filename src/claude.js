@@ -197,7 +197,7 @@ export async function wrapClaude({ args = [], maxEvaluations = 25,
     throw new Error('Set TYPESAFE_API_KEY in .env, or use --max-evaluations 0 for local hook diagnostics.');
   }
   const evaluator = maxEvaluations === 0 ? undefined : evaluate ?? createJevEvaluator({
-    apiKey: env.TYPESAFE_API_KEY, model: env.JBRANCHER_MODEL ?? 'jev-1.13.0', timeoutMs: 3000
+    apiKey: env.TYPESAFE_API_KEY, model: env.JBRANCHER_MODEL ?? 'jev-latest', timeoutMs: 3000
   });
   await mkdir(logDirectory, { recursive: true, mode: 0o700 });
   const logPath = join(logDirectory, `${randomUUID()}.jsonl`);

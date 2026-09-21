@@ -82,7 +82,7 @@ let evaluatorCalls = 0;
 let actorCalls = 0;
 const evaluateWithUsage = createJevEvaluator({
   apiKey: process.env.TYPESAFE_API_KEY,
-  model: process.env.JBRANCHER_MODEL ?? 'jev-1.13.0',
+  model: process.env.JBRANCHER_MODEL ?? 'jev-latest',
   timeoutMs: Number(process.env.JBRANCHER_TIMEOUT_MS ?? 10_000)
 });
 

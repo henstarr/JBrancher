@@ -42,6 +42,7 @@ test('Jev route evaluator uses a bounded Choice with an explicit no-match option
   assert.equal(result.noMatchScore, 0.1);
   assert.equal(result.selected, 1);
   assert.equal(result.confidence, 0.82);
+  assert.equal(request.model, 'jev-latest');
   assert.deepEqual(result.usage[0], {
     provider: 'typesafe', model: 'jev-1.13.0', status: 'succeeded', inputTokens: 44, outputTokens: 18
   });
@@ -76,4 +77,50 @@ test('Jev route evaluator preserves the legacy Noul question mode', async () => 
   const result = await evaluate({ task: 'Choose', state: {}, history: [], candidates: [{ tool: 'a', args: {} }, { tool: 'b', args: {} }] });
   assert.deepEqual(result.scores, [0.91, 0.12]);
   assert.equal(request.questions.candidate_0.type, 'noul');
+});
+
+test('Jev accepts an explicit stable alias and a concrete response revision', async () => {
+  const evaluate = createJevEvaluator({
+    apiKey: 'test-key',
+    model: 'jev-latest',
+    fetchImpl: async (_url, options) => {
+      assert.equal(JSON.parse(options.body).model, 'jev-latest');
+      return {
+        ok: true,
+        async json() {
+          return {
+            model: 'jev-2.0.0',
+            answers: {
+              route_choice: {
+                type: 'choice',
+                choice: 'no_match',
+                confidence: 1,
+                probabilities: { candidate_0: 0.01, no_match: 0.99 }
+              }
+            },
+            usage: { input_tokens: 8, output_tokens: 4 }
+          };
+        }
+      };
+    }
+  });
+  const result = await evaluate({ task: 'Inspect', state: {}, history: [], candidates: [{ tool: 'read', args: {} }] });
+  assert.equal(result.selected, null);
+  assert.equal(result.usage[0].model, 'jev-2.0.0');
+});
+
+test('Jev rejects an unsupported model id before making a request', () => {
+  assert.throws(() => createJevEvaluator({ apiKey: 'test-key', model: 'jev-preview' }), /jev-latest or a pinned/);
+});
+
+test('Jev fails closed when a Choice catalog exceeds the provider limit', async () => {
+  const evaluate = createJevEvaluator({ apiKey: 'test-key', fetchImpl: async () => {
+    throw new Error('The provider must not be called');
+  } });
+  await assert.rejects(
+    evaluate({ task: 'Choose', state: {}, history: [], candidates: Array.from({ length: 255 }, (_, index) => ({
+      tool: 'read', args: { path: `file-${index}.txt` }
+    })) }),
+    /at most 254 candidates plus no_match/
+  );
 });

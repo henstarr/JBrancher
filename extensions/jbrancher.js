@@ -83,7 +83,7 @@ function evaluationForEnvironment() {
   if (!apiKey) return undefined;
   return createJevEvaluator({
     apiKey,
-    model: process.env.JBRANCHER_PI_JEV_MODEL || 'jev-1.13.0',
+    model: process.env.JBRANCHER_PI_JEV_MODEL || 'jev-latest',
     timeoutMs: numberEnv('JBRANCHER_PI_JEV_TIMEOUT_MS', 3000)
   });
 }

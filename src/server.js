@@ -51,7 +51,7 @@ function readJson(request) {
  */
 export function createJBrancherServer({
   apiKey = process.env.TYPESAFE_API_KEY,
-  model = 'jev-1.13.0',
+  model = 'jev-latest',
   endpoint,
   timeoutMs = 5000,
   fetchImpl,
