@@ -4,6 +4,7 @@ import { spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { traceToDatasetExample } from '../src/learning.js';
 
 function runCli(args, cwd) {
   return new Promise((resolve, reject) => {
@@ -55,6 +56,38 @@ test('dataset CLI merges exported JSONL without changing routes', async () => {
     assert.equal(merged.length, 1);
     assert.deepEqual(merged[0].evidence.sources, ['machine-a', 'machine-b']);
     assert.doesNotMatch(JSON.stringify(merged), /apikey_should_not_persist_cli/);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('learn CLI imports an approved dataset into local routes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jbrancher-cli-import-'));
+  try {
+    const inputPath = join(directory, 'shared.jsonl');
+    const routePath = join(directory, 'routes.json');
+    const example = traceToDatasetExample({
+      task: 'inspect package.json',
+      source: 'shared-dataset',
+      outcome: 'success',
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    });
+    await writeFile(inputPath, `${JSON.stringify(example)}\n`, 'utf8');
+    const result = await runCli([
+      'learn',
+      '--dir', directory,
+      '--import', inputPath,
+      '--approve-import',
+      '--min-observations', '1'
+    ], process.cwd());
+    assert.equal(result.code, 0, result.stderr);
+    const summary = JSON.parse(result.stdout);
+    assert.equal(summary.imported.importedTraces, 1);
+    assert.equal(summary.imported.reviewed, true);
+    const routes = JSON.parse(await readFile(routePath, 'utf8'));
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].verified, false);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

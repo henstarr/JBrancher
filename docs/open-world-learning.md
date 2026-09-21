@@ -95,6 +95,23 @@ requested dataset file: imported examples do not mutate local routes or become
 executable without a separate, reviewed learning step. This gives teams a
 portable dataset-building path without requiring a hosted database.
 
+To explicitly review and use a shared export on another machine, import it into
+that machine's local evidence store:
+
+```sh
+npx jbrancher learn \
+  --dir .jbrancher \
+  --import shared-dataset.jsonl \
+  --approve-import
+```
+
+Import recomputes every fingerprint from the task and actions, re-redacts the
+row, caps unusually large aggregate counts, and keeps imported verification
+claims out of the trusted metadata. The normal promotion policy then applies:
+read-only routes may activate after the configured evidence threshold, while
+writes and other side effects remain inactive unless newly verified by the
+target harness.
+
 The adapter writes to `.jbrancher/` locally and supports multiple concurrent
 episodes. Inputs, outputs, per-step state, and candidate metadata are redacted
 by the learning store. Generic runtime decisions also retain bounded usage

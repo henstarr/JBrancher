@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createLocalLearningStore, mergeDatasetExamples } from '../src/learning.js';
+import { createLocalLearningStore, importDatasetExamples, mergeDatasetExamples, refreshAndPromoteReadOnly } from '../src/learning.js';
 
 const fixture = JSON.parse(await readFile(new URL('./fixtures/swebench-lite-mini.json', import.meta.url), 'utf8'));
 
@@ -47,6 +47,13 @@ try {
     raw.examples.filter((_, index) => index % 2 === 0),
     raw.examples.filter((_, index) => index % 2 === 1)
   ]);
+  const importedStore = createLocalLearningStore({ directory: join(directory, 'imported') });
+  const imported = await importDatasetExamples(importedStore, portableMerged, {
+    reviewed: true,
+    source: 'shared-swebench-derived-dataset'
+  });
+  const importedLearning = await refreshAndPromoteReadOnly(importedStore, { minimumObservations: 2 });
+  const importedRoutes = await importedStore.readRoutes();
   const report = {
     benchmark: 'JBrancher local dataset curation',
     source: { url: fixture.sourceUrl, instances: instances.length, repetitions },
@@ -61,6 +68,11 @@ try {
     portableMergedExamples: portableMerged.length,
     portableMergeObservations: portableMerged.reduce((total, example) => total + example.evidence.observations, 0),
     portableMergeNoExternalDatabase: true,
+    importedTraces: imported.importedTraces,
+    importedObservations: imported.importedObservations,
+    importedActiveReadOnlyRoutes: importedRoutes.filter(route => route.status === 'active' && route.safety === 'read-only').length,
+    importedPromotedRoutes: importedLearning.promoted.length,
+    portableImportNoExternalDatabase: true,
     reusableCuratedExamples: curated.examples.filter(example => example.reusable).length,
     uniqueFingerprints: new Set(curated.examples.map(example => example.fingerprint)).size
   };
@@ -73,6 +85,11 @@ try {
     assert.equal(report.portableMergedExamples, report.curatedExamples);
     assert.equal(report.portableMergeObservations, report.rawExamples);
     assert.equal(report.portableMergeNoExternalDatabase, true);
+    assert.equal(report.importedTraces, report.rawExamples);
+    assert.equal(report.importedObservations, report.rawExamples);
+    assert.equal(report.importedActiveReadOnlyRoutes, report.curatedExamples);
+    assert.equal(report.importedPromotedRoutes, report.curatedExamples);
+    assert.equal(report.portableImportNoExternalDatabase, true);
     assert.equal(report.uniqueFingerprints, report.curatedExamples);
     assert.equal(report.reusableCuratedExamples, report.curatedExamples);
     assert.equal(report.curationRatio, Number((1 - 1 / repetitions).toFixed(3)));

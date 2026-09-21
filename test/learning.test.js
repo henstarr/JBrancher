@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, mergeDatasetExamples, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
+import { classifyActionSafety, createEpisodeRecorder, createLocalLearningStore, createLearnedRoutes, deduplicateDataset, findLearnedActions, findLearnedWorkflows, importDatasetExamples, mergeDatasetExamples, proposeRoutes, redactText, refreshAndPromoteReadOnly, taskSimilarity, traceToDatasetExample } from '../src/learning.js';
 import { createPiRouter } from '../src/pi.js';
 
 test('local learning stores redacted traces and proposes repeated read routes', async () => {
@@ -468,6 +468,78 @@ test('dataset exports merge locally without promoting imported routes', () => {
   assert.deepEqual(merged[0].evidence.sources, ['machine-a', 'machine-b']);
   assert.doesNotMatch(JSON.stringify(merged), /apikey_should_not_persist/);
   assert.throws(() => mergeDatasetExamples([[{ task: 'missing fingerprint' }]]), /fingerprint/);
+});
+
+test('reviewed dataset imports become local evidence without importing verification claims', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-dataset-import-'));
+  try {
+    const first = traceToDatasetExample({
+      id: 'import-first',
+      task: 'inspect package.json',
+      source: 'machine-a',
+      outcome: 'success',
+      createdAt: '2026-09-20T00:00:00.000Z',
+      metadata: { postconditionValidated: true },
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    });
+    const second = traceToDatasetExample({
+      id: 'import-second',
+      task: 'inspect package.json',
+      source: 'machine-b',
+      outcome: 'success',
+      createdAt: '2026-09-20T00:01:00.000Z',
+      toolCalls: [{ toolName: 'read', input: { path: 'package.json' }, ok: true }]
+    });
+    const [curated] = deduplicateDataset([first, second]);
+    const store = createLocalLearningStore({ directory });
+    await assert.rejects(
+      () => importDatasetExamples(store, [curated]),
+      /reviewed: true/
+    );
+    const imported = await importDatasetExamples(store, [curated], {
+      reviewed: true,
+      source: 'shared-dataset'
+    });
+    assert.equal(imported.importedTraces, 2);
+    assert.equal(imported.importedObservations, 2);
+    assert.equal(imported.unsafeExamples, 0);
+    const traces = await store.readTraces();
+    assert.equal(traces.length, 2);
+    assert.equal(traces.every(trace => trace.metadata.postconditionValidated === undefined), true);
+    const learned = await refreshAndPromoteReadOnly(store, { minimumObservations: 2 });
+    assert.equal(learned.promoted.length, 1);
+    assert.equal(learned.promoted[0].verified, false);
+    const routes = await store.readRoutes();
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].verified, false);
+    const unsafeFirst = traceToDatasetExample({
+      task: 'update package.json',
+      source: 'machine-a',
+      outcome: 'success',
+      toolCalls: [{ toolName: 'write', input: { path: 'package.json', content: '{}' }, ok: true }]
+    });
+    const unsafeSecond = traceToDatasetExample({
+      task: 'update package.json',
+      source: 'machine-b',
+      outcome: 'success',
+      toolCalls: [{ toolName: 'write', input: { path: 'package.json', content: '{}' }, ok: true }]
+    });
+    const [unsafeCurated] = deduplicateDataset([unsafeFirst, unsafeSecond]);
+    const unsafeImported = await importDatasetExamples(store, [unsafeCurated], {
+      reviewed: true,
+      source: 'shared-dataset'
+    });
+    assert.equal(unsafeImported.unsafeExamples, 1);
+    await refreshAndPromoteReadOnly(store, { minimumObservations: 2 });
+    const unsafeRoute = (await store.readRoutes()).find(route => route.safety !== 'read-only');
+    assert.equal(unsafeRoute.status, 'candidate');
+    await assert.rejects(
+      () => importDatasetExamples(store, [{ ...curated, fingerprint: 'tampered' }], { reviewed: true }),
+      /fingerprint does not match/
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
 
 test('unsafe candidates require explicit force to promote', async () => {

@@ -504,6 +504,21 @@ The merge validates and re-redacts each row, keeps one representative per
 trajectory fingerprint, and preserves aggregate observations. Imported rows are
 data only; review or relearn them separately before enabling execution.
 
+After reviewing a shared export, use it as local evidence with the explicit
+approval flag:
+
+```sh
+npx jbrancher learn \
+  --dir .jbrancher \
+  --import shared-dataset.jsonl \
+  --approve-import
+```
+
+JBrancher recomputes fingerprints, caps aggregate evidence, and does not trust
+verification claims from the imported file. Safe read-only routes still need the
+normal observation threshold; writes remain inactive until the destination
+harness verifies their postconditions.
+
 For a bounded live Jev smoke test, copy `.env.example` to `.env`, set `TYPESAFE_API_KEY`, and run:
 
 ```sh

@@ -801,6 +801,101 @@ export function traceToDatasetExample(trace) {
   };
 }
 
+function importedObservationCount(example, maxObservationsPerExample) {
+  const reportedObservations = Number.isSafeInteger(example.evidence?.observations)
+    && example.evidence.observations > 0 ? example.evidence.observations : 1;
+  const reportedSuccesses = Number.isSafeInteger(example.evidence?.outcomes?.success)
+    && example.evidence.outcomes.success > 0 ? example.evidence.outcomes.success : null;
+  const observations = example.outcome === 'success'
+    ? (reportedSuccesses ?? reportedObservations)
+    : 1;
+  return Math.min(Math.max(1, observations), maxObservationsPerExample);
+}
+
+function validateImportedDatasetExample(example, index) {
+  if (!example || typeof example !== 'object' || Array.isArray(example)) {
+    throw new TypeError(`Dataset example ${index} must be an object`);
+  }
+  const safeExample = redactValue(example, 0, 8);
+  if (typeof safeExample.fingerprint !== 'string' || !safeExample.fingerprint) {
+    throw new TypeError(`Dataset example ${index} requires a fingerprint`);
+  }
+  if (typeof safeExample.task !== 'string' || !safeExample.task) {
+    throw new TypeError(`Dataset example ${index} requires a task`);
+  }
+  if (!Array.isArray(safeExample.steps)) {
+    throw new TypeError(`Dataset example ${index} requires steps`);
+  }
+  const expectedFingerprint = datasetFingerprint(safeExample.task, safeExample.steps);
+  if (safeExample.fingerprint !== expectedFingerprint) {
+    throw new TypeError(`Dataset example ${index} fingerprint does not match task and steps`);
+  }
+  return safeExample;
+}
+
+/**
+ * Import explicitly reviewed, redacted dataset rows into a local trace store.
+ *
+ * Imported rows are treated as evidence, not permissions. We recompute the
+ * fingerprint, derive safety from the actions, cap aggregate replay counts,
+ * and keep imported context nested so a shared row cannot claim a verified
+ * postcondition. Callers must explicitly opt in with reviewed: true.
+ */
+export async function importDatasetExamples(store, examples, {
+  reviewed = false,
+  source = 'dataset-import',
+  maxObservationsPerExample = 100
+} = {}) {
+  if (!store || typeof store.appendTrace !== 'function') {
+    throw new TypeError('A learning store with appendTrace is required');
+  }
+  if (!Array.isArray(examples)) throw new TypeError('examples must be an array');
+  if (reviewed !== true) throw new Error('Dataset imports require explicit reviewed: true');
+  if (typeof source !== 'string' || !source) throw new TypeError('source must be a non-empty string');
+  if (!Number.isSafeInteger(maxObservationsPerExample) || maxObservationsPerExample < 1) {
+    throw new TypeError('maxObservationsPerExample must be a positive integer');
+  }
+
+  let importedTraces = 0;
+  let importedObservations = 0;
+  let cappedExamples = 0;
+  let unsafeExamples = 0;
+  for (const [index, rawExample] of examples.entries()) {
+    const example = validateImportedDatasetExample(rawExample, index);
+    const observations = importedObservationCount(example, maxObservationsPerExample);
+    if ((example.evidence?.observations || 1) > observations) cappedExamples++;
+    const safety = classifyTraceSafety(example.steps);
+    if (safety !== 'read-only') unsafeExamples++;
+    for (let observation = 0; observation < observations; observation++) {
+      await store.appendTrace({
+        id: `import-${hash(`${source}\n${example.fingerprint}\n${observation}`)}`,
+        task: example.task,
+        source,
+        toolCalls: example.steps,
+        outcome: example.outcome || 'unknown',
+        routeResolution: example.routeResolution || 'unknown',
+        metadata: {
+          datasetImport: true,
+          datasetFingerprint: example.fingerprint,
+          importedFrom: source,
+          importedContext: example.context || {}
+        }
+      });
+      importedTraces++;
+      importedObservations++;
+    }
+  }
+  return {
+    examples: examples.length,
+    importedTraces,
+    importedObservations,
+    cappedExamples,
+    unsafeExamples,
+    source,
+    reviewed: true
+  };
+}
+
 export function buildDataset(traces, { includeUnknown = true, deduplicate = false } = {}) {
   if (!Array.isArray(traces)) throw new TypeError('traces must be an array');
   const examples = traces
@@ -907,7 +1002,7 @@ export function mergeDatasetExamples(exampleSets = []) {
       || typeof example.fingerprint !== 'string' || !example.fingerprint) {
       throw new TypeError(`Dataset example ${index} requires a fingerprint`);
     }
-    return redactValue(example);
+    return redactValue(example, 0, 8);
   });
   return deduplicateDataset(examples);
 }
