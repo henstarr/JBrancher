@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawnSync } from 'node:child_process';
+import { validateSWEbenchPredictionFile } from '../src/swebench.js';
 
 function value(name, fallback) {
   const index = process.argv.indexOf(name);
@@ -79,6 +80,13 @@ if (!options.predictions) {
   console.error(`Prediction file: ${options.predictions}`);
   console.error(`Official command: ${command.executable} ${command.args.join(' ')}`);
   if (options.dryRun) process.exit(0);
+  const validation = await validateSWEbenchPredictionFile(options.predictions, {
+    expectedInstanceIds: options.instanceIds
+  });
+  if (!validation.valid) {
+    throw new Error(`Prediction JSONL validation failed:\n${validation.errors.join('\n')}`);
+  }
+  console.error(`Prediction validation: ${validation.rows} row(s), ${validation.instanceIds.length} unique instance(s)`);
   if (!options.modal && !dockerAvailable()) {
     throw new Error('Docker is unavailable. Install Docker, or rerun with --modal after configuring Modal credentials.');
   }

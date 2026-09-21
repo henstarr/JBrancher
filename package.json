@@ -43,6 +43,7 @@
     "bench:live-pi-learning": "node benchmarks/run-live-pi-learning.js",
     "bench:provenance": "node benchmarks/verify-swebench-fixture.js",
     "bench:swebench": "node benchmarks/run-official-swebench.js",
+    "bench:swebench-validate": "node benchmarks/validate-swebench-predictions.js",
     "bench:package": "node benchmarks/run-package-smoke.js"
   },
   "exports": {
@@ -53,7 +54,8 @@
     "./replay": "./src/replay.js",
     "./discovery": "./src/discovery.js",
     "./pi": "./src/pi.js",
-    "./server": "./src/server.js"
+    "./server": "./src/server.js",
+    "./swebench": "./src/swebench.js"
   },
   "pi": {
     "extensions": [

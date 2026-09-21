@@ -844,8 +844,13 @@ When you have a real prediction file, run the official evaluator through the
 included wrapper:
 
 ```sh
+npm run bench:swebench-validate -- --predictions predictions/jbrancher.jsonl
 npm run bench:swebench -- --predictions predictions/jbrancher.jsonl --dry-run
 ```
+
+The validator checks the official JSONL shape and requested-instance coverage
+before Docker or Modal is invoked; patch correctness remains the evaluator's
+responsibility.
 
 ## Project plan
 

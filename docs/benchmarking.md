@@ -47,6 +47,19 @@ replays the multi-step workflow in fresh workspaces only after the verifier has
 approved two successful observations. It measures verified write-workflow
 reuse; it is not an official SWE-bench patch-resolution score.
 
+Before invoking the official evaluator, validate a generated prediction file
+without any external service:
+
+```sh
+npm run bench:swebench-validate -- \
+  --predictions predictions/jbrancher.jsonl \
+  --instance-ids <instance-id>
+```
+
+The validator checks JSONL shape, required fields, duplicate instance IDs, and
+requested-instance coverage. It does not judge patch correctness. The official
+runner performs the same validation before attempting Docker or Modal.
+
 These assertions require perfect fixture decision/holdout coverage and a
 positive measured reduction in actor/frontier calls or context tokens.
 
