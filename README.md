@@ -729,6 +729,22 @@ frontier episodes per task, then verifies that later authorized decisions are
 served by learned local routes without evaluator calls. It requires no API key
 and uses a temporary local store.
 
+To exercise the dependency-free Python bridge used by a Harbor-style agent,
+run:
+
+```sh
+npm run bench:harbor -- --assert
+```
+
+This starts a temporary local proxy, runs the shipped
+`JBrancherHarborLoop`, sends unknown two-step tasks to its frontier callback,
+records the completed trajectories, and then replays authorized workflows.
+The current 14-task fixture records 56 episodes, learns 14 routes, replays 28
+workflows, and cuts frontier steps from 112 to 56 with 100% success and route
+coverage. It is a bridge benchmark rather than an official Terminal-Bench
+score; the same loop can be placed inside a real Harbor `BaseAgent` once its
+environment executor and verifier are supplied.
+
 For the live Pi route-choice benchmark, calibrate thresholds explicitly and
 keep assertions enabled:
 

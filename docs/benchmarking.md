@@ -23,6 +23,7 @@ npm run bench:tokens -- --assert
 npm run bench:learning -- --assert
 npm run bench:proxy -- --assert
 npm run bench:workflow -- --assert
+npm run bench:harbor -- --assert
 ```
 
 These assertions require perfect fixture decision/holdout coverage and a
@@ -115,6 +116,25 @@ npm run bench:workflow -- --assert
 The latest run promoted 14 two-step workflows, replayed 28 of 56 total
 attempts, and reduced synthetic actor steps from 112 to 56 with 100% route
 coverage. See [docs/workflow-proxy-2026-09-21.md](workflow-proxy-2026-09-21.md).
+
+The Python Harbor-style bridge benchmark exercises the shipped
+`JBrancherHarborLoop` through the same local HTTP service that a Harbor agent
+would use:
+
+```sh
+npm run bench:harbor -- --assert
+```
+
+The current fixture run uses 14 SWE-bench-derived tasks and four repetitions.
+The first two repetitions intentionally send no registered actions, so the
+frontier callback handles the complete two-step trajectory. The final two
+repetitions expose the host's current per-step capability catalog, allowing
+the learned workflow to replay only when every action is still authorized.
+The latest local run records 56 episodes, promotes 14 routes, replays 28
+workflows, and reduces frontier steps from 112 to 56 with 100% success and
+route coverage. It is a deterministic bridge/regression benchmark, not an
+official Harbor or Terminal-Bench score; run the real Harbor agent against
+Terminal-Bench after the adapter is connected to its environment and oracle.
 
 To measure actual Jev overhead and savings on the same learning path, configure
 `TYPESAFE_API_KEY` in the ignored `.env` and run:
