@@ -661,6 +661,8 @@ not run the official SWE-bench grader or print credentials.
 
 The latest one-task live verification is recorded in
 [docs/live-learning-1task-2026-09-20.md](docs/live-learning-1task-2026-09-20.md).
+The latest real-Codex actor-learning run is recorded in
+[docs/live-codex-2026-09-21.md](docs/live-codex-2026-09-21.md).
 The latest three-task Pi preference-learning run is recorded in
 [docs/live-pi-3tasks-2026-09-20.md](docs/live-pi-3tasks-2026-09-20.md).
 The full 14-task Choice-evaluator run is recorded in

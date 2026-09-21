@@ -157,6 +157,9 @@ temporary learning store after the run.
 The one-task pilot is in [docs/live-codex-2026-09-20.md](live-codex-2026-09-20.md),
 and the larger three-task sample is in
 [docs/live-codex-3tasks-2026-09-20.md](live-codex-3tasks-2026-09-20.md).
+The latest one-task run with the current learner is in
+[docs/live-codex-2026-09-21.md](live-codex-2026-09-21.md); it preserved 100%
+fixture success while saving 15,937 observed Codex provider tokens.
 
 To exercise the same learning path through the language-agnostic HTTP proxy,
 run:
