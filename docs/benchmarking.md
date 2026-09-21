@@ -370,6 +370,12 @@ The class accepts the frontier callback, environment executor, and optional
 postcondition verifier through overridable hooks. This bridge is not an
 assertion that Harbor has already been run in this repository.
 
+The CI `harbor-compat` job installs the pinned current Harbor package
+(`harbor==0.23.0`) and verifies that `JBrancherHarborAgent` is a real
+`BaseAgent` subclass. This checks the Python integration boundary without
+requiring Docker. A full Terminal-Bench run still requires a local Docker
+daemon and a real frontier agent.
+
 When a task has no registered candidate set, the adapter may omit `candidates`
 or send `[]`. The proxy returns a safe `abstain/unmatched` decision; the
 frontier actor remains owned by the harness, and its completed tool trajectory
