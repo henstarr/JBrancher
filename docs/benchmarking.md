@@ -172,6 +172,10 @@ and the larger three-task sample is in
 The latest one-task run with the current learner is in
 [docs/live-codex-2026-09-21.md](live-codex-2026-09-21.md); it preserved 100%
 fixture success while saving 15,937 observed Codex provider tokens.
+The latest three-task run is in
+[docs/live-codex-3tasks-2026-09-21.md](live-codex-3tasks-2026-09-21.md); it
+reduced Codex actor calls by 50% and saved 95,717 observed provider tokens
+while preserving 100% task success and route coverage.
 
 To exercise the same learning path through the language-agnostic HTTP proxy,
 run:
