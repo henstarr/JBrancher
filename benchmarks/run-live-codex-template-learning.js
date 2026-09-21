@@ -1,0 +1,203 @@
+#!/usr/bin/env node
+
+import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { spawn } from 'node:child_process';
+import { performance } from 'node:perf_hooks';
+import { createJBrancher } from '../src/index.js';
+import { createLocalLearningStore } from '../src/learning.js';
+
+function numericFlag(name, fallback, { min, max }) {
+  const index = process.argv.indexOf(name);
+  const value = index === -1 ? fallback : Number(process.argv[index + 1]);
+  if (!Number.isSafeInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer from ${min} to ${max}`);
+  }
+  return value;
+}
+
+function sumUsage(rows) {
+  return rows.reduce((total, usage) => ({
+    inputTokens: total.inputTokens + (Number.isSafeInteger(usage?.inputTokens) ? usage.inputTokens : 0),
+    outputTokens: total.outputTokens + (Number.isSafeInteger(usage?.outputTokens) ? usage.outputTokens : 0)
+  }), { inputTokens: 0, outputTokens: 0 });
+}
+
+function decodeCodexOutput(stdout) {
+  let finalText = '';
+  let usage = { inputTokens: 0, outputTokens: 0 };
+  for (const line of stdout.split(/\r?\n/).filter(Boolean)) {
+    let event;
+    try { event = JSON.parse(line); } catch { continue; }
+    if (event.type === 'item.completed' && event.item?.type === 'agent_message') {
+      finalText = typeof event.item.text === 'string' ? event.item.text : finalText;
+    }
+    if (event.type === 'turn.completed' && event.usage) {
+      usage = {
+        inputTokens: Number.isSafeInteger(event.usage.input_tokens) ? event.usage.input_tokens : 0,
+        outputTokens: Number.isSafeInteger(event.usage.output_tokens) ? event.usage.output_tokens : 0
+      };
+    }
+  }
+  const objectText = finalText.match(/\{[\s\S]*\}/)?.[0];
+  if (!objectText) throw new Error('Codex did not return a JSON action');
+  let decision;
+  try { decision = JSON.parse(objectText); } catch { throw new Error('Codex returned malformed action JSON'); }
+  if (!decision.action || typeof decision.action.tool !== 'string' || !decision.action.args
+    || typeof decision.action.args.query !== 'string') {
+    throw new Error('Codex action did not contain tool, args, and query');
+  }
+  return { action: decision.action, usage };
+}
+
+async function askCodex({ task, cwd, executable }) {
+  const prompt = [
+    'Act as a frontier tool-selection actor for a harness.',
+    'Do not use tools. Return only one JSON object in this exact shape:',
+    '{"action":{"tool":"lookup","args":{"query":"<query>","scope":"docs"}}}',
+    'Copy the query phrase from the task into args.query exactly. Do not explain.',
+    `TASK:\n${task}`
+  ].join('\n\n');
+  return new Promise((resolve, reject) => {
+    const child = spawn(executable, [
+      'exec', '--json', '--ephemeral', '--skip-git-repo-check',
+      '--cd', cwd, '--sandbox', 'read-only', '-'
+    ], { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', chunk => { stdout += chunk; });
+    child.stderr.on('data', chunk => { stderr += chunk; });
+    child.stdin.on('error', () => {});
+    child.stdin.end(prompt);
+    child.once('error', () => reject(new Error('Could not launch Codex CLI')));
+    child.once('close', (code, signal) => {
+      if (code !== 0) {
+        reject(new Error(`Codex exited unsuccessfully (${code ?? signal ?? 'unknown'})`));
+        return;
+      }
+      try { resolve(decodeCodexOutput(stdout)); }
+      catch (error) {
+        const detail = stderr.includes('authentication') ? ' (authentication failed)' : '';
+        reject(new Error(`${error.message}${detail}`));
+      }
+    });
+  });
+}
+
+function expectedAction(value) {
+  return { tool: 'lookup', args: { query: value, scope: 'docs' } };
+}
+
+const valueCount = numericFlag('--values', 4, { min: 3, max: 6 });
+const shouldAssert = process.argv.includes('--assert');
+const values = ['authentication', 'billing', 'payments', 'reliability', 'security', 'performance'].slice(0, valueCount);
+const executable = process.env.JBRANCHER_CODEX_EXECUTABLE
+  || (process.platform === 'win32' ? 'codex.exe' : 'codex');
+const root = await mkdtemp(join(tmpdir(), 'jbrancher-live-codex-template-'));
+
+try {
+  const baselineUsageRows = [];
+  const baselineRows = [];
+  for (const value of values) {
+    const task = `lookup ${value} in docs`;
+    const started = performance.now();
+    const result = await askCodex({ task, cwd: root, executable });
+    baselineUsageRows.push(result.usage);
+    baselineRows.push({
+      value,
+      correct: JSON.stringify(result.action) === JSON.stringify(expectedAction(value)),
+      elapsedMs: Number((performance.now() - started).toFixed(1)),
+      usage: result.usage
+    });
+  }
+
+  const store = createLocalLearningStore({ directory: join(root, 'learning') });
+  const learnedUsageRows = [];
+  const learnedRows = [];
+  let actorCalls = 0;
+  for (const [index, value] of values.entries()) {
+    const task = `lookup ${value} in docs`;
+    const expected = expectedAction(value);
+    const brancher = createJBrancher({
+      getCandidates: async () => [expected],
+      actor: async () => {
+        actorCalls++;
+        const result = await askCodex({ task, cwd: root, executable });
+        learnedUsageRows.push(result.usage);
+        return { action: result.action, usage: [{ provider: 'codex', status: 'succeeded', ...result.usage }] };
+      },
+      execute: async action => {
+        assert.deepEqual(action, expected);
+        return `lookup results for ${value}`;
+      },
+      learningStore: store,
+      learningSource: 'live-codex-template-learning',
+      learningCwd: root,
+      learningPromotionMode: 'verified',
+      learningMinimumObservations: 2,
+      learningOutcome: ({ event }) => JSON.stringify(event?.decision?.action) === JSON.stringify(expected)
+    });
+    const started = performance.now();
+    const result = await brancher.step({ task, state: { scope: 'docs', index } });
+    learnedRows.push({
+      value,
+      source: result.decision.source,
+      correct: JSON.stringify(result.decision.action) === JSON.stringify(expected),
+      elapsedMs: Number((performance.now() - started).toFixed(1)),
+      usage: result.decision.usage ?? []
+    });
+  }
+
+  const routes = await store.readRoutes();
+  const templateRoutes = routes.filter(route => route.matcher?.type === 'action-template');
+  const baselineUsage = sumUsage(baselineUsageRows);
+  const learnedUsage = sumUsage(learnedUsageRows);
+  const report = {
+    benchmark: 'live-Codex-open-world-action-template-learning',
+    actor: executable,
+    values,
+    baselineActorCalls: values.length,
+    learnedActorCalls: actorCalls,
+    actorCallsAvoided: values.length - actorCalls,
+    actorCallReduction: Number(((values.length - actorCalls) / values.length).toFixed(3)),
+    baselineUsage,
+    learnedUsage,
+    providerTokensSaved: (baselineUsage.inputTokens + baselineUsage.outputTokens)
+      - (learnedUsage.inputTokens + learnedUsage.outputTokens),
+    templateRoutes: templateRoutes.map(route => ({
+      id: route.id,
+      status: route.status,
+      verified: route.verified,
+      observations: route.observations,
+      matcher: route.matcher
+    })),
+    baselineTaskSuccessRate: baselineRows.filter(row => row.correct).length / baselineRows.length,
+    learnedTaskSuccessRate: learnedRows.filter(row => row.correct).length / learnedRows.length,
+    learnedTaskSuccess: learnedRows.every(row => row.correct),
+    learnedRouteCoverage: learnedRows.slice(2).every(row => row.source === 'learned' && row.correct),
+    baselineRows,
+    learnedRows,
+    caveat: 'Real Codex actor decisions with a deterministic lookup executor; not an official SWE-bench patch-resolution score.'
+  };
+
+  if (shouldAssert) {
+    // The live baseline is intentionally measured, not treated as an oracle:
+    // a frontier model can make a wrong selection. The learning arm must still
+    // succeed on its teaching examples and every later local replay.
+    assert.ok(learnedRows.slice(0, 2).every(row => row.correct));
+    assert.ok(report.learnedTaskSuccess);
+    assert.equal(actorCalls, 2);
+    assert.ok(report.learnedRouteCoverage);
+    assert.equal(templateRoutes.length, 1);
+    assert.equal(templateRoutes[0].status, 'active');
+    assert.equal(templateRoutes[0].verified, true);
+    assert.ok(report.providerTokensSaved > 0);
+  }
+  console.log(JSON.stringify(report, null, 2));
+} finally {
+  await rm(root, { recursive: true, force: true });
+}

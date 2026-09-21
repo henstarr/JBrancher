@@ -250,6 +250,16 @@ and the larger three-task sample is in
 The latest one-task run with the current learner is in
 [docs/live-codex-2026-09-21.md](live-codex-2026-09-21.md); it preserved 100%
 fixture success while saving 15,937 observed Codex provider tokens.
+
+To measure live frontier usage for the parameterized action-template learner:
+
+```sh
+npm run bench:live-codex-template -- --values 3 --assert
+```
+
+This is an experimental opt-in run. It requires the local Codex CLI and is not
+part of CI because it consumes provider quota.
+
 The latest three-task run is in
 [docs/live-codex-3tasks-2026-09-21.md](live-codex-3tasks-2026-09-21.md); it
 reduced Codex actor calls by 50% and saved 95,717 observed provider tokens
@@ -258,6 +268,12 @@ The latest seven-task run is in
 [docs/live-codex-7tasks-2026-09-21.md](live-codex-7tasks-2026-09-21.md); it
 reduced Codex actor calls from 28 to 14 and saved 223,413 observed provider
 tokens while preserving 100% task success and learned-route coverage.
+The experimental live argument-template pilot is in
+[docs/live-codex-template-2026-09-21.md](live-codex-template-2026-09-21.md);
+it reduced actor calls from 3 to 2, saved 15,915 observed provider tokens, and
+replayed an unseen query after two verified teaching episodes. Its independently
+sampled actor-only arm was not a perfect oracle in that small run, so it is
+evidence of replay/cost behavior, not a model-quality estimate.
 The current-model compatibility run is in
 [docs/live-jev-latest-2026-09-21.md](live-jev-latest-2026-09-21.md); it used
 `jev-latest`, observed the concrete serving revision, and preserved 100% route

@@ -40,6 +40,7 @@
     "bench:adaptation": "node benchmarks/run-adaptive-drift.js",
     "bench:live-learning": "node benchmarks/run-live-learning.js",
     "bench:live-codex": "node benchmarks/run-live-codex-learning.js",
+    "bench:live-codex-template": "node benchmarks/run-live-codex-template-learning.js",
     "bench:live-codex-proxy": "node benchmarks/run-live-codex-proxy-learning.js",
     "bench:live-pi-learning": "node benchmarks/run-live-pi-learning.js",
     "bench:provenance": "node benchmarks/verify-swebench-fixture.js",
