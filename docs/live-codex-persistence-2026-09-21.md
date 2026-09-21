@@ -15,8 +15,8 @@ npm run bench:live-codex-template -- \
 | Measure | Result |
 | --- | ---: |
 | Codex actor calls | 2 |
-| Observed input tokens | 31,698 |
-| Observed output tokens | 93 |
+| Observed input tokens | 31,738 |
+| Observed output tokens | 74 |
 | Verified teaching episodes | 2 |
 | Active verified template routes | 1 |
 | Route | `lookup {{jbrancher.slot.key-query}} in docs` |
@@ -35,7 +35,7 @@ npm run bench:live-codex-template -- \
 | Novel values replayed | 2/2 |
 | Novel frontier calls | 0 |
 | Authorization checks | 2 |
-| Replay latency | 8.7 ms and 4.9 ms |
+| Replay latency | 8.8 ms and 4.1 ms |
 | Task success | 2/2 |
 
 The teaching process paid the frontier cost once and persisted the route in

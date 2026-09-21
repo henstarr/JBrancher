@@ -394,8 +394,10 @@ postconditions and retries bounded teaching episodes instead of crashing.
 The latest authorization-only run is in
 [docs/live-codex-authorization-2026-09-21.md](live-codex-authorization-2026-09-21.md);
 it omitted `getCandidates`, used the dynamic authorization callback, saved
-31,842 observed Codex tokens, and served both novel values without frontier
-calls.
+31,821 observed Codex tokens with 100% paired task success, and served both
+novel values without frontier calls. The live benchmark now applies the same
+bounded correctness retry policy to baseline and learning arms and counts all
+provider calls in the comparison.
 The current-model compatibility run is in
 [docs/live-jev-latest-2026-09-21.md](live-jev-latest-2026-09-21.md); it used
 `jev-latest`, observed the concrete serving revision, and preserved 100% route
