@@ -117,6 +117,44 @@ test('local learning stores promote and quarantine exact route preferences', asy
   }
 });
 
+test('candidate refresh accumulates new evidence without reviving quarantined routes', async () => {
+  const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-refresh-'));
+  try {
+    const store = createLocalLearningStore({ directory });
+    const trace = id => ({
+      id,
+      task: 'inspect package.json',
+      toolCalls: [{ toolCallId: id, toolName: 'read', input: { path: 'package.json' }, ok: true }],
+      outcome: 'success'
+    });
+    await store.appendTrace(trace('one'));
+    await store.appendTrace(trace('two'));
+    await refreshAndPromoteReadOnly(store, { minimumObservations: 2 });
+    let routes = await store.readRoutes();
+    assert.equal(routes.length, 1);
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].observations, 2);
+    await store.recordRouteSuccess(routes[0].id);
+
+    await store.appendTrace(trace('three'));
+    await store.refreshCandidates();
+    routes = await store.readRoutes();
+    assert.equal(routes[0].status, 'active');
+    assert.equal(routes[0].observations, 3);
+    assert.equal(routes[0].successfulReplays, 1);
+
+    await store.recordRouteFailure(routes[0].id, { reason: 'authorization changed' });
+    await store.appendTrace(trace('four'));
+    await store.refreshCandidates();
+    routes = await store.readRoutes();
+    assert.equal(routes[0].status, 'quarantined');
+    assert.equal(routes[0].observations, 4);
+    assert.equal(routes[0].failures, 1);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('local preferences are isolated by redacted execution context', async () => {
   const directory = await mkdtemp(join(process.env.TEMP || process.env.TMP || '.', 'jbrancher-learning-context-'));
   try {

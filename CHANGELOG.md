@@ -4,6 +4,8 @@
 
 - Scope local Pi route preferences to a redacted execution-context fingerprint,
   preventing a learned choice from crossing project or mode boundaries.
+- Keep route evidence cumulative across refreshes without reviving quarantined
+  routes.
 
 ## 0.1.0 - 2026-09-17
 

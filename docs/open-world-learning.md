@@ -63,6 +63,11 @@ read-only episodes can be promoted automatically. Writes, deletes, deployments,
 and other side effects remain evidence only unless the harness supplies a
 postcondition verifier and explicitly enables verified promotion.
 
+Candidate refresh is cumulative: later traces update observations, examples,
+and verification evidence for an existing route without resetting its active
+or quarantined status. A quarantined route therefore remains quarantined until
+an operator explicitly re-promotes it, even if new traces arrive.
+
 Use `await learner.learn()` after importing or editing traces, and
 `await learner.snapshot()` to expose dataset demand, outcome, route-resolution,
 candidate, active-route, quarantine, and successful-replay counts in a UI or

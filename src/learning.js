@@ -771,9 +771,23 @@ export function createLocalLearningStore({ directory, traceFile = 'traces.jsonl'
       const candidates = proposeRoutes(await readTraces(), options);
       for (const candidate of candidates) {
         const previous = existingById.get(candidate.id);
-        existingById.set(candidate.id, previous?.status === 'active' || previous?.status === 'quarantined'
-          ? { ...candidate, ...previous, status: previous.status }
-          : { ...previous, ...candidate });
+        if (!previous) {
+          existingById.set(candidate.id, candidate);
+          continue;
+        }
+        // Candidate evidence is recomputed from the complete local trace set.
+        // Keep that fresh evidence even after promotion, while preserving
+        // lifecycle state and replay/failure telemetry owned by the route.
+        existingById.set(candidate.id, {
+          ...candidate,
+          status: previous.status,
+          ...(previous.promotedAt ? { promotedAt: previous.promotedAt } : {}),
+          ...(Number.isSafeInteger(previous.failures) ? { failures: previous.failures } : {}),
+          ...(previous.lastFailureAt ? { lastFailureAt: previous.lastFailureAt } : {}),
+          ...(previous.failureReason ? { failureReason: previous.failureReason } : {}),
+          ...(Number.isSafeInteger(previous.successfulReplays) ? { successfulReplays: previous.successfulReplays } : {}),
+          ...(previous.lastReplayAt ? { lastReplayAt: previous.lastReplayAt } : {})
+        });
       }
       return writeRoutesUnlocked([...existingById.values()]);
     });
