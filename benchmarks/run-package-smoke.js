@@ -42,7 +42,7 @@ try {
   const importCheck = run(node, [
     '--input-type=module',
     '-e',
-    "const pkg = await import('jbrancher'); if (typeof pkg.createJBrancher !== 'function') throw new Error('createJBrancher export missing'); console.log(JSON.stringify({ package: 'jbrancher', exports: Object.keys(pkg).sort() }));"
+    "const pkg = await import('jbrancher'); if (typeof pkg.createJBrancher !== 'function') throw new Error('createJBrancher export missing'); const markdown = await import('jbrancher/markdown'); const gate = await import('jbrancher/markdown-gate'); if (typeof markdown.compactMarkdown !== 'function' || typeof gate.verifyMarkdownTree !== 'function') throw new Error('Markdown exports missing'); console.log(JSON.stringify({ package: 'jbrancher', exports: Object.keys(pkg).sort(), markdownExports: true }));"
   ], { cwd: installDir });
 
   const demoOutput = run(npx, ['--no-install', 'jbrancher', 'demo'], {

@@ -25,6 +25,25 @@ JBrancher is for teams that want to keep their existing agent loop while making 
 
 This project is an early developer release. It is designed to measure whether a decision layer actually reduces cost or latency in a particular harness. It does not claim universal savings or act as a sandbox.
 
+## Guarded Markdown and skill compaction
+
+JBrancher also creates smaller Markdown candidates and verifies externally upgraded
+skill trees for CI. Its three-layer gate checks exact protected-content/script
+preservation, configurable OpenAI embedding similarity, and caller-supplied
+baseline/candidate behavioral tests. Token savings use a real tokenizer; a missing
+provider or test layer cannot produce accepted verification.
+
+```sh
+# OPENAI_API_KEY is used only for semantic verification:
+npx jbrancher compact --input ./skills --output ../skills-candidate \
+  --tests ./compaction-tests.json --report ./compaction-report.json
+```
+
+Semantic verification sends original and candidate Markdown to OpenAI. Embedding
+similarity is a heuristic, and zero new regressions applies only to configured
+tests. See [Markdown compaction](docs/markdown-compaction.md) for protected syntax,
+BYO tests, model-upgrade checks, incomplete/offline results, and data boundaries.
+
 ## Get started in 60 seconds
 
 ### Wrap Claude Code

@@ -61,7 +61,9 @@
     "./discovery": "./src/discovery.js",
     "./pi": "./src/pi.js",
     "./server": "./src/server.js",
-    "./swebench": "./src/swebench.js"
+    "./swebench": "./src/swebench.js",
+    "./markdown": "./src/markdown.js",
+    "./markdown-gate": "./src/markdown-cli.js"
   },
   "pi": {
     "extensions": [
@@ -80,5 +82,8 @@
     "README.md",
     ".env.example",
     "LICENSE"
-  ]
+  ],
+  "dependencies": {
+    "js-tiktoken": "1.0.21"
+  }
 }

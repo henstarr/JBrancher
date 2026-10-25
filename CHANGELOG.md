@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Add guarded Markdown candidate generation and a three-layer CI verification
+  gate: exact protected-content/script preservation, configurable OpenAI
+  embedding similarity, and caller-supplied baseline/candidate behavioral tests.
+  Include tokenizer counts, external model-upgrade candidate checks, explicit
+  incomplete/failure states, and named baseline-failure handling.
 - Scope local Pi route preferences to a redacted execution-context fingerprint,
   preventing a learned choice from crossing project or mode boundaries.
 - Keep route evidence cumulative across refreshes without reviving quarantined
