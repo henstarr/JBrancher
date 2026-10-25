@@ -11,6 +11,7 @@ import { parseClaudeArgs, wrapClaude } from '../src/claude.js';
 import { parseCodexArgs, wrapCodex } from '../src/codex.js';
 
 function printHelp() {
+  console.log('Markdown: jbrancher compact --input DIR (--output NEW_DIR | --candidate DIR) --tests CONFIG.json [--report report.json]');
   console.log('Codex batch: jbrancher wrap codex --mode shadow|adaptive --prompt "task" [--max-evaluations 25] -- [Codex exec options]');
   console.log('Claude Code: jbrancher wrap claude [--mode shadow|adaptive] [--max-evaluations 25] -- [Claude arguments]');
   console.log('Dataset import: jbrancher learn --import shared.jsonl --approve-import [--dir .jbrancher]');
@@ -243,6 +244,17 @@ async function main() {
   const command = process.argv[2] ?? 'help';
   if (command === 'help' || command === '--help' || command === '-h') return printHelp();
   if (command === 'demo') return import('../examples/demo.js');
+  if (command === 'compact') {
+    loadDotEnv();
+    try {
+      const { runMarkdownCli } = await import('../src/markdown-cli.js');
+      process.exitCode = await runMarkdownCli(process.argv.slice(3));
+    } catch (error) {
+      console.error(error.message);
+      process.exitCode = 2;
+    }
+    return;
+  }
   if (command === 'wrap') {
     const isCodex = process.argv[3] === 'codex';
     const options = (isCodex ? parseCodexArgs : parseClaudeArgs)(process.argv.slice(3));
